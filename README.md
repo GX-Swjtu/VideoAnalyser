@@ -6,8 +6,14 @@
 
 - **通用格式支持** — mp4, mkv, flv, avi, ts, mov, wmv, webm 等所有 FFmpeg 支持的封装格式
 - **Packet 列表** — 表格视图展示每个 Packet 的类型、序号、偏移、大小、编解码器、时间戳、标志等
-- **标签页模式** — 主标签为 Packet 列表，双击打开可关闭的详情标签页
-- **Packet 详情** — 元数据树形展示 + Hex 十六进制视图 + 解码内容
+- **六大分析页面** — Data Table、Media Info、Timestamp、Bitrate、AVSync、Log 六个常驻标签页
+- **媒体信息** — 树形展示文件格式、流信息、编解码器参数、GOP 大小等元数据
+- **时间戳分析** — QtCharts 折线图展示视频/音频 DTS，自动检测跳变和回跳异常
+- **码率分析** — 逐帧视频码率折线图，显示平均码率参考线
+- **音视频同步** — 逐包 A-V sync delta 折线图，直观展示音画同步情况
+- **日志分析** — 捕获 FFmpeg 运行时日志，支持级别过滤（Debug/Info/Warning/Error）
+- **图表 X 轴切换** — 所有图表支持文件偏移 (MB) 与时间 (秒) 两种 X 轴模式
+- **Packet 详情** — 双击打开详情标签页：元数据树形展示 + Hex 十六进制视图 + 解码内容
 - **视频帧解码** — 静态图片展示，P/B 帧从关键帧追帧解码
 - **音频波形** — 自定义波形控件可视化展示
 - **音频频谱图** — 频谱图控件展示音频频域信息
@@ -20,7 +26,7 @@
 |------|---------|------|
 | **CMake** | 3.16+ | 构建系统 |
 | **Ninja** | — | 构建后端（推荐） |
-| **Qt** | 6.x (推荐 6.8+) | UI 框架，需要 Widgets 和 LinguistTools 模块 |
+| **Qt** | 6.x (推荐 6.8+) | UI 框架，需要 Widgets、Charts 和 LinguistTools 模块 |
 | **FFmpeg** | 6.x+ | 音视频解封装和解码 |
 | **vcpkg** | — | C++ 包管理器，管理 FFmpeg 和 GTest 依赖 |
 | **C++ 编译器** | C++17 | MinGW 13+ / GCC 9+ / MSVC 2019+ |
@@ -145,14 +151,19 @@ make debug
 ├── config.mk.example           # Makefile 本地配置模板
 ├── vcpkg.json                  # vcpkg 依赖声明
 ├── include/                    # 头文件
-│   ├── mainwindow.h            #   主窗口
+│   ├── mainwindow.h            #   主窗口，管理六大分析标签页
 │   ├── packetreader.h          #   FFmpeg 解封装，遍历 Packet
 │   ├── packetlistmodel.h       #   Packet 列表数据模型
 │   ├── packetdetailwidget.h    #   Packet 详情标签页
 │   ├── packetdecoder.h         #   解码逻辑（视频/音频/字幕）
 │   ├── hexviewwidget.h         #   Hex 十六进制查看控件
 │   ├── audiowaveformwidget.h   #   音频波形控件
-│   └── audiospectrogramwidget.h#   音频频谱图控件
+│   ├── audiospectrogramwidget.h#   音频频谱图控件
+│   ├── mediainfowidget.h       #   媒体信息分析面板
+│   ├── timestampchartwidget.h  #   时间戳分析图表
+│   ├── bitratechartwidget.h    #   码率分析图表
+│   ├── avsyncchartwidget.h     #   音视频同步分析图表
+│   └── loganalysiswidget.h     #   FFmpeg 日志分析面板
 ├── src/                        # 源文件
 │   ├── main.cpp                #   应用入口
 │   ├── mainwindow.cpp
@@ -162,7 +173,12 @@ make debug
 │   ├── packetdecoder.cpp
 │   ├── hexviewwidget.cpp
 │   ├── audiowaveformwidget.cpp
-│   └── audiospectrogramwidget.cpp
+│   ├── audiospectrogramwidget.cpp
+│   ├── mediainfowidget.cpp
+│   ├── timestampchartwidget.cpp
+│   ├── bitratechartwidget.cpp
+│   ├── avsyncchartwidget.cpp
+│   └── loganalysiswidget.cpp
 ├── ui/                         # Qt .ui 界面文件
 │   └── mainwindow.ui
 ├── i18n/                       # 国际化翻译
@@ -176,6 +192,11 @@ make debug
     ├── test_hexviewwidget.cpp
     ├── test_audiowaveformwidget.cpp
     ├── test_audiospectrogramwidget.cpp
+    ├── test_mediainfowidget.cpp
+    ├── test_timestampchartwidget.cpp
+    ├── test_bitratechartwidget.cpp
+    ├── test_avsyncchartwidget.cpp
+    ├── test_loganalysiswidget.cpp
     ├── test_utils.cpp
     └── testdata/               # 测试用小型视频文件
 ```
@@ -208,7 +229,7 @@ ctest --output-on-failure
 ## 技术栈
 
 - **C++17** — 编程语言
-- **Qt 6 Widgets** — GUI 框架
+- **Qt 6 Widgets + Charts** — GUI 框架及图表组件
 - **FFmpeg** (libavformat, libavcodec, libavutil, libswscale, libswresample) — 音视频处理
 - **Google Test** — 单元测试框架
 - **CMake + Ninja** — 构建系统

@@ -27,7 +27,7 @@
 | Hex 视图 | 自定义 QAbstractScrollArea | 高性能，支持大数据 |
 | 数据存储策略 | 内存只存元数据，按需从文件读取原始数据 | 用户选择，大文件友好 |
 | P/B 帧解码 | av_seek_frame 到最近关键帧 → 连续送帧追帧解码 → PTS 匹配目标帧 | 正确解码非关键帧的唯一方式 |
-| 额外 Qt 模块 | Widgets + Concurrent | Concurrent 用于异步解码，避免阻塞 UI |
+| 额外 Qt 模块 | Widgets + Concurrent + Charts | Concurrent 用于异步解码，Charts 用于时间戳/码率/AVSync 图表 |
 | C++ 标准 | C++17 | 已配置 |
 | 单元测试框架 | Google Test (gtest) | vcpkg 已安装，CMake 原生支持 |
 | 依赖管理 | vcpkg | 需要新库（如 OpenCV）时通过 vcpkg.json 添加 |
@@ -81,8 +81,11 @@
 ## 当前项目状态
 
 - **构建基础设施完备**：CMake + vcpkg + Qt 6.8.3 + FFmpeg 8.0.1 + MinGW 13.x + Ninja
-- **源码为空壳**：MainWindow 仅有构造/析构，无任何业务逻辑，UI 为空白窗口
+- **核心功能完成**：PacketReader、PacketListModel、PacketDecoder、PacketDetailWidget、HexViewWidget、AudioWaveformWidget、AudioSpectrogramWidget 均已实现并通过测试
+- **分析页面完成**：MediaInfoWidget、TimestampChartWidget、BitrateChartWidget、AVSyncChartWidget、LogAnalysisWidget 五大分析面板已实现并通过测试
+- **主窗口六标签页**：Data Table、Media Info、Timestamp、Bitrate、AVSync、Log 全部集成
 - **CMake GLOB_RECURSE**：自动收集 `src/*.cpp` 和 `include/*.h`，新增文件无需修改 CMakeLists.txt
+- **单元测试**：142 个测试全部通过
 
 ---
 
@@ -90,35 +93,52 @@
 
 ```
 include/
-    mainwindow.h              # [修改] 主窗口，管理标签页、工具栏、菜单
-    packetreader.h             # [新建] FFmpeg 解封装，遍历 Packet，维护关键帧索引
-    packetlistmodel.h          # [新建] QAbstractTableModel，驱动 Packet 列表表格
-    packetdetailwidget.h       # [新建] 单个 Packet 的详情标签页
-    packetdecoder.h            # [新建] 封装解码逻辑（视频追帧、音频、字幕）
-    hexviewwidget.h            # [新建] 十六进制数据查看控件
-    audiowaveformwidget.h      # [新建] 音频波形绘制控件
+    mainwindow.h              # [已实现] 主窗口，管理六大分析标签页
+    packetreader.h             # [已实现] FFmpeg 解封装，遍历 Packet，维护关键帧索引
+    packetlistmodel.h          # [已实现] QAbstractTableModel，驱动 Packet 列表表格
+    packetdetailwidget.h       # [已实现] 单个 Packet 的详情标签页
+    packetdecoder.h            # [已实现] 封装解码逻辑（视频追帧、音频、字幕）
+    hexviewwidget.h            # [已实现] 十六进制数据查看控件
+    audiowaveformwidget.h      # [已实现] 音频波形绘制控件
+    audiospectrogramwidget.h   # [已实现] 音频频谱图控件
+    mediainfowidget.h          # [已实现] 媒体信息分析面板
+    timestampchartwidget.h     # [已实现] 时间戳分析 QtCharts 图表
+    bitratechartwidget.h       # [已实现] 码率分析 QtCharts 图表
+    avsyncchartwidget.h        # [已实现] 音视频同步分析 QtCharts 图表
+    loganalysiswidget.h        # [已实现] FFmpeg 日志分析面板
 src/
     main.cpp                   # [不变] 应用入口
-    mainwindow.cpp             # [修改] 主窗口逻辑实现
-    packetreader.cpp           # [新建]
-    packetlistmodel.cpp        # [新建]
-    packetdetailwidget.cpp     # [新建]
-    packetdecoder.cpp          # [新建]
-    hexviewwidget.cpp          # [新建]
-    audiowaveformwidget.cpp    # [新建]
+    mainwindow.cpp             # [已实现] 主窗口逻辑实现
+    packetreader.cpp           # [已实现]
+    packetlistmodel.cpp        # [已实现]
+    packetdetailwidget.cpp     # [已实现]
+    packetdecoder.cpp          # [已实现]
+    hexviewwidget.cpp          # [已实现]
+    audiowaveformwidget.cpp    # [已实现]
+    audiospectrogramwidget.cpp # [已实现]
+    mediainfowidget.cpp        # [已实现]
+    timestampchartwidget.cpp   # [已实现]
+    bitratechartwidget.cpp     # [已实现]
+    avsyncchartwidget.cpp      # [已实现]
+    loganalysiswidget.cpp      # [已实现]
 ui/
     mainwindow.ui              # [修改] 或完全用代码构建 UI
 tests/
-    CMakeLists.txt             # [新建] 测试构建配置（find gtest, add test targets）
-    test_packetreader.cpp      # [新建] PacketReader 单元测试
-    test_packetlistmodel.cpp   # [新建] PacketListModel 单元测试
-    test_packetdecoder.cpp     # [新建] PacketDecoder 单元测试
-    test_hexviewwidget.cpp     # [新建] HexViewWidget 数据逻辑测试
-    test_audiowaveformwidget.cpp # [新建] AudioWaveformWidget 数据逻辑测试
-    test_utils.cpp             # [新建] 工具函数单元测试（时间格式化、Hex转换等）
-    testdata/                  # [新建] 测试用小视频文件目录
+    CMakeLists.txt             # [已实现] 测试构建配置（find gtest, add test targets）
+    test_packetreader.cpp      # [已实现] PacketReader 单元测试
+    test_packetlistmodel.cpp   # [已实现] PacketListModel 单元测试
+    test_packetdecoder.cpp     # [已实现] PacketDecoder 单元测试
+    test_hexviewwidget.cpp     # [已实现] HexViewWidget 数据逻辑测试
+    test_audiowaveformwidget.cpp # [已实现] AudioWaveformWidget 数据逻辑测试
+    test_audiospectrogramwidget.cpp # [已实现] AudioSpectrogramWidget 测试
+    test_mediainfowidget.cpp   # [已实现] MediaInfoWidget 测试
+    test_timestampchartwidget.cpp # [已实现] TimestampChartWidget 测试
+    test_bitratechartwidget.cpp  # [已实现] BitrateChartWidget 测试
+    test_avsyncchartwidget.cpp # [已实现] AVSyncChartWidget 测试
+    test_loganalysiswidget.cpp # [已实现] LogAnalysisWidget 测试
+    test_utils.cpp             # [已实现] 工具函数单元测试
+    testdata/                  # [已实现] 测试用小视频文件目录
         test_h264_aac.mp4      # 含 H264 视频 + AAC 音频的短测试文件（<1MB）
-        test_subtitle.mkv      # 含字幕流的测试文件
 ```
 
 ---
@@ -878,6 +898,12 @@ add_test(NAME VideoAnalyserTests COMMAND VideoAnalyserTests)
 | `test_packetdecoder.cpp` | PacketDecoder | 视频追帧解码、音频解码、字幕解码、错误处理 |
 | `test_hexviewwidget.cpp` | HexViewWidget | 数据设置、行数计算、偏移计算 |
 | `test_audiowaveformwidget.cpp` | AudioWaveformWidget | 数据设置、降采样逻辑、多声道分离 |
+| `test_audiospectrogramwidget.cpp` | AudioSpectrogramWidget | FFT 计算、频谱图数据逻辑 |
+| `test_mediainfowidget.cpp` | MediaInfoWidget | 格式化函数、GOP 计算、真实文件集成 |
+| `test_timestampchartwidget.cpp` | TimestampChartWidget | 时间戳序列构建、异常检测 |
+| `test_bitratechartwidget.cpp` | BitrateChartWidget | 码率序列构建、平均码率计算 |
+| `test_avsyncchartwidget.cpp` | AVSyncChartWidget | 同步差值序列、DTS 插值 |
+| `test_loganalysiswidget.cpp` | LogAnalysisWidget | 日志模型、级别过滤、回调机制 |
 | `test_utils.cpp` | 通用工具函数 | 时间格式化、Hex 格式化、标志位转文字 |
 
 **测试数据**：
@@ -912,20 +938,114 @@ make test    # 或 ctest --test-dir build/Debug --output-on-failure
 
 ---
 
+### Phase 10：媒体信息分析 — MediaInfoWidget
+
+**目标**：以树形结构展示文件格式、流信息、编解码器参数等元数据，类似 flvAnalyser 的 Media Info 页面。
+
+**文件**：`include/mediainfowidget.h` + `src/mediainfowidget.cpp`
+
+**实现要点**：
+
+- 使用 `QTreeWidget` 展示分组信息：Summary（概要）、Details（详细）、Video[N]、Audio[N] 等
+- 各分组使用不同背景色区分（浅蓝/浅绿/浅黄/浅灰）
+- 静态工具方法（公开供测试）：`formatFileSize()`、`formatDuration()`、`formatBitrate()`、`computeAverageGopSize()`、`formatAspectRatio()`
+- 视频流信息：编解码器、Profile@Level、分辨率、像素格式、位深、帧率、GOP 大小、扫描类型、SAR/DAR、时间基
+- 音频流信息：编解码器、采样率、声道布局、采样格式、比特率
+
+**单元测试**（`tests/test_mediainfowidget.cpp`）：formatFileSize、formatDuration、formatBitrate、formatAspectRatio、computeAverageGopSize + 真实文件集成测试
+
+---
+
+### Phase 11：时间戳分析 — TimestampChartWidget
+
+**目标**：使用 QtCharts 折线图展示视频 DTS（蓝色）和音频 DTS（橙色），检测时间戳跳变和回跳异常。
+
+**文件**：`include/timestampchartwidget.h` + `src/timestampchartwidget.cpp`
+
+**实现要点**：
+
+- 使用 `QChart` + `QLineSeries` 绘制双折线图
+- X 轴可切换：文件偏移 (MB) / 时间 (秒)，通过 `QComboBox` 切换
+- 静态方法：`buildTimestampSeries()` 构建指定媒体类型的时间戳序列
+- 静态方法：`detectAnomalies()` 检测 DTS 异常（"jump" 正向跳变 / "rollback" 回跳），使用 `TimestampAnomaly` 结构体
+
+**单元测试**（`tests/test_timestampchartwidget.cpp`）：buildTimestampSeries（空数据、仅视频、时间模式）、detectAnomalies（正常、回跳、跳变、忽略其他类型）
+
+---
+
+### Phase 12：码率分析 — BitrateChartWidget
+
+**目标**：使用 QtCharts 折线图展示逐帧视频码率。
+
+**文件**：`include/bitratechartwidget.h` + `src/bitratechartwidget.cpp`
+
+**实现要点**：
+
+- 码率计算：`(size * 8) / durationTime / 1e6` Mbps
+- 绿色折线图 + 红色平均码率参考线
+- X 轴可切换（偏移/时间）
+- 静态方法：`buildBitrateSeries()`、`computeAverageBitrate()`
+
+**单元测试**（`tests/test_bitratechartwidget.cpp`）：buildBitrateSeries（空数据、正常、零时长、时间模式、流过滤）、computeAverageBitrate
+
+---
+
+### Phase 13：音视频同步分析 — AVSyncChartWidget
+
+**目标**：使用 QtCharts 折线图展示逐包音视频同步差值 (audio DTS - video DTS) (ms)。
+
+**文件**：`include/avsyncchartwidget.h` + `src/avsyncchartwidget.cpp`
+
+**实现要点**：
+
+- 按序号配对音频包和视频包，计算 delta = (audioDtsTime - videoDtsTime) * 1000 ms
+- 红色折线图 + y=0 绿色参考线
+- X 轴可切换（偏移/时间）
+- 静态方法：`buildSyncDeltaSeries()`、`interpolateVideoDts()`（线性插值辅助函数）
+
+**单元测试**（`tests/test_avsyncchartwidget.cpp`）：interpolateVideoDts（空、首前、末后、精确匹配、中点、四分之一点）、buildSyncDeltaSeries（空、完美同步、音频超前、偏移模式）
+
+---
+
+### Phase 14：日志分析 — LogAnalysisWidget
+
+**目标**：捕获并展示 FFmpeg 运行时日志，支持级别过滤。
+
+**文件**：`include/loganalysiswidget.h` + `src/loganalysiswidget.cpp`
+
+**实现要点**：
+
+- 通过 `av_log_set_callback()` 注入自定义日志回调，捕获 AV_LOG_INFO 及以上级别
+- 线程安全：使用 `QMutex` + 待处理队列 + `QTimer`（200ms 轮询）将回调线程的日志传递到 UI 线程
+- `LogEntry` 结构体：序号、级别、来源类名、消息、时间戳
+- `LogTableModel`（QAbstractTableModel）：5 列（级别图标、序号、级别文字、摘要、详情）
+- `LogFilterProxyModel`（QSortFilterProxyModel）：按最低级别过滤
+- `QComboBox` 级别过滤 + 清空按钮
+- 静态方法：`levelToString()`、`levelToIcon()`、`installCallback()`、`takePendingEntries()`
+
+**单元测试**（`tests/test_loganalysiswidget.cpp`）：levelToString、levelToIcon、LogTableModel 增删改查、LogFilterProxyModel 级别过滤、widget 创建/清空
+
+---
+
 ## 执行顺序
 
 按依赖关系分阶段执行：
 
 ```
-Phase 1: PacketReader              (数据层基础，无依赖)
-Phase 2: PacketListModel           (依赖 Phase 1 的 PacketInfo)
-Phase 3: HexViewWidget             (独立 UI 控件，无依赖)
-Phase 4: AudioWaveformWidget       (独立 UI 控件，无依赖)
-Phase 5: PacketDecoder             (依赖 Phase 1 的 PacketReader)
-Phase 6: PacketDetailWidget        (依赖 Phase 3, 4, 5)
-Phase 7: MainWindow                (依赖 Phase 1, 2, 6，整合所有组件)
-Phase 8: 单元测试基础设施           (贯穿所有 Phase，每个模块完成后立即写测试)
-Phase 9: 编译验证与集成调试         (全部完成后)
+Phase 1: PacketReader              (数据层基础，无依赖)                    ✅ 已完成
+Phase 2: PacketListModel           (依赖 Phase 1 的 PacketInfo)           ✅ 已完成
+Phase 3: HexViewWidget             (独立 UI 控件，无依赖)                  ✅ 已完成
+Phase 4: AudioWaveformWidget       (独立 UI 控件，无依赖)                  ✅ 已完成
+Phase 5: PacketDecoder             (依赖 Phase 1 的 PacketReader)         ✅ 已完成
+Phase 6: PacketDetailWidget        (依赖 Phase 3, 4, 5)                   ✅ 已完成
+Phase 7: MainWindow                (依赖 Phase 1, 2, 6，整合所有组件)      ✅ 已完成
+Phase 8: 单元测试基础设施           (贯穿所有 Phase)                        ✅ 已完成
+Phase 9: 编译验证与集成调试         (全部完成后)                            ✅ 已完成
+Phase 10: MediaInfoWidget          (依赖 Phase 1 的 StreamInfo)           ✅ 已完成
+Phase 11: TimestampChartWidget     (依赖 Phase 1 的 PacketInfo + QtCharts) ✅ 已完成
+Phase 12: BitrateChartWidget       (依赖 Phase 1 的 PacketInfo + QtCharts) ✅ 已完成
+Phase 13: AVSyncChartWidget        (依赖 Phase 1 的 PacketInfo + QtCharts) ✅ 已完成
+Phase 14: LogAnalysisWidget        (独立 FFmpeg 日志捕获)                  ✅ 已完成
 ```
 
 **可并行的 Phase**：Phase 3 和 Phase 4 互相独立，可同时进行。

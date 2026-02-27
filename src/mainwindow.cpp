@@ -2,6 +2,11 @@
 #include "packetreader.h"
 #include "packetlistmodel.h"
 #include "packetdetailwidget.h"
+#include "mediainfowidget.h"
+#include "timestampchartwidget.h"
+#include "bitratechartwidget.h"
+#include "avsyncchartwidget.h"
+#include "loganalysiswidget.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -51,13 +56,12 @@ MainWindow::~MainWindow()
 
 void MainWindow::setupUI()
 {
-    // 中央 TabWidget
+    // 中央 TabWidget（所有标签页不可关闭）
     m_tabWidget = new QTabWidget(this);
-    m_tabWidget->setTabsClosable(true);
-    m_tabWidget->setMovable(true);
-    connect(m_tabWidget, &QTabWidget::tabCloseRequested, this, &MainWindow::onTabCloseRequested);
+    m_tabWidget->setTabsClosable(false);
+    m_tabWidget->setMovable(false);
 
-    // Packet 列表作为第一个 tab
+    // Tab 0: Data Table
     auto *listWidget = new QWidget();
     auto *listLayout = new QVBoxLayout(listWidget);
     listLayout->setContentsMargins(0, 0, 0, 0);
@@ -77,8 +81,27 @@ void MainWindow::setupUI()
     connect(m_tableView, &QTableView::doubleClicked, this, &MainWindow::onPacketDoubleClicked);
 
     listLayout->addWidget(m_tableView);
+    m_tabWidget->addTab(listWidget, QStringLiteral("Data Table"));
 
-    m_tabWidget->addTab(listWidget, QStringLiteral("Packet 列表"));
+    // Tab 1: Media Info
+    m_mediaInfoWidget = new MediaInfoWidget();
+    m_tabWidget->addTab(m_mediaInfoWidget, QStringLiteral("Media Info"));
+
+    // Tab 2: Timestamp
+    m_timestampChartWidget = new TimestampChartWidget();
+    m_tabWidget->addTab(m_timestampChartWidget, QStringLiteral("Timestamp"));
+
+    // Tab 3: Bitrate
+    m_bitrateChartWidget = new BitrateChartWidget();
+    m_tabWidget->addTab(m_bitrateChartWidget, QStringLiteral("Bitrate"));
+
+    // Tab 4: AVSync
+    m_avsyncChartWidget = new AVSyncChartWidget();
+    m_tabWidget->addTab(m_avsyncChartWidget, QStringLiteral("AVSync"));
+
+    // Tab 5: Log
+    m_logAnalysisWidget = new LogAnalysisWidget();
+    m_tabWidget->addTab(m_logAnalysisWidget, QStringLiteral("Log"));
 
     setCentralWidget(m_tabWidget);
 
@@ -89,17 +112,12 @@ void MainWindow::setupUI()
 
 void MainWindow::setupMenuAndToolbar()
 {
-    // 菜单栏
-    auto *fileMenu = menuBar()->addMenu(QStringLiteral("文件(&F)"));
-    auto *openAction = fileMenu->addAction(QStringLiteral("打开(&O)..."));
-    openAction->setShortcut(QKeySequence::Open);
-    connect(openAction, &QAction::triggered, this, &MainWindow::openFile);
-
-    // 工具栏
+    // 工具栏（不使用菜单栏，节省垂直空间）
     auto *toolbar = addToolBar(QStringLiteral("工具栏"));
     toolbar->setMovable(false);
 
-    auto *openBtn = toolbar->addAction(QStringLiteral("\U0001F4C2 打开"));
+    auto *openBtn = toolbar->addAction(QStringLiteral("📂 打开"));
+    openBtn->setShortcut(QKeySequence::Open);
     connect(openBtn, &QAction::triggered, this, &MainWindow::openFile);
 
     toolbar->addSeparator();
@@ -157,8 +175,8 @@ void MainWindow::openFile()
 
 void MainWindow::loadFile(const QString &filePath)
 {
-    // 关闭之前的
-    closeAllDetailTabs();
+    // 清空之前的分析数据
+    clearAllAnalysis();
     m_model->clear();
     m_reader->close();
 
@@ -191,6 +209,13 @@ void MainWindow::loadFile(const QString &filePath)
     }
 
     m_model->setPackets(m_reader->packets());
+
+    // 填充分析标签页数据
+    m_mediaInfoWidget->setMediaInfo(filePath, m_reader->streams(),
+                                     m_reader->formatContext(), m_reader->packets());
+    m_timestampChartWidget->setPackets(m_reader->packets());
+    m_bitrateChartWidget->setPackets(m_reader->packets(), m_reader->streams());
+    m_avsyncChartWidget->setPackets(m_reader->packets(), m_reader->streams());
 
     // 调整列宽
     m_tableView->resizeColumnsToContents();
@@ -232,16 +257,6 @@ void MainWindow::onPacketDoubleClicked(const QModelIndex &index)
     detail->show();
 }
 
-void MainWindow::onTabCloseRequested(int tabIndex)
-{
-    // 第一个 tab (Packet 列表) 不可关闭
-    if (tabIndex == 0) return;
-
-    QWidget *w = m_tabWidget->widget(tabIndex);
-    m_tabWidget->removeTab(tabIndex);
-    delete w;
-}
-
 void MainWindow::onFilterChanged(int comboIndex)
 {
     int typeValue = m_filterCombo->itemData(comboIndex).toInt();
@@ -266,12 +281,11 @@ void MainWindow::updateStatusBar()
                                .arg(m_reader->packetCount()));
 }
 
-void MainWindow::closeAllDetailTabs()
+void MainWindow::clearAllAnalysis()
 {
-    // 从后往前删除，保留第 0 个 tab
-    while (m_tabWidget->count() > 1) {
-        QWidget *w = m_tabWidget->widget(m_tabWidget->count() - 1);
-        m_tabWidget->removeTab(m_tabWidget->count() - 1);
-        delete w;
-    }
+    m_mediaInfoWidget->clear();
+    m_timestampChartWidget->clear();
+    m_bitrateChartWidget->clear();
+    m_avsyncChartWidget->clear();
+    // Log 页不清空（日志累积显示）
 }

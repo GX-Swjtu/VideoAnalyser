@@ -13,6 +13,11 @@ class QTableView;
 class QComboBox;
 class QLabel;
 class QProgressDialog;
+class MediaInfoWidget;
+class TimestampChartWidget;
+class BitrateChartWidget;
+class AVSyncChartWidget;
+class LogAnalysisWidget;
 
 class MainWindow : public QMainWindow
 {
@@ -29,7 +34,6 @@ protected:
 private slots:
     void openFile();
     void onPacketDoubleClicked(const QModelIndex &index);
-    void onTabCloseRequested(int tabIndex);
     void onFilterChanged(int comboIndex);
 
 private:
@@ -37,7 +41,7 @@ private:
     void setupMenuAndToolbar();
     void loadFile(const QString &filePath);
     void updateStatusBar();
-    void closeAllDetailTabs();
+    void clearAllAnalysis();
 
     PacketReader *m_reader = nullptr;
     PacketListModel *m_model = nullptr;
@@ -47,6 +51,13 @@ private:
     QTableView *m_tableView = nullptr;
     QComboBox *m_filterCombo = nullptr;
     QLabel *m_statusLabel = nullptr;
+
+    // 分析标签页
+    MediaInfoWidget *m_mediaInfoWidget = nullptr;
+    TimestampChartWidget *m_timestampChartWidget = nullptr;
+    BitrateChartWidget *m_bitrateChartWidget = nullptr;
+    AVSyncChartWidget *m_avsyncChartWidget = nullptr;
+    LogAnalysisWidget *m_logAnalysisWidget = nullptr;
 };
 
 #endif // MAINWINDOW_H
