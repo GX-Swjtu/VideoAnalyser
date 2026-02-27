@@ -1,94 +1,77 @@
-# VideoAnalyser — Copilot Instructions
+# VideoAnalyser — Copilot 指令文件
 
-## Architecture
+## 架构
 
-Qt 6 + FFmpeg (C++17) video packet analyzer. Data flows: **PacketReader** (FFmpeg demux) → **PacketListModel** (Qt Model/View) → **MainWindow** (tabs + table). Double-click opens **PacketDetailWidget** which uses **PacketDecoder** (static methods) for on-demand decode and embeds **HexViewWidget**, **AudioWaveformWidget**, **AudioSpectrogramWidget**, or a `ScalableImageLabel` for video frames.
+Qt 6 + FFmpeg (C++17) 视频 Packet 分析器。数据流向：**PacketReader**（FFmpeg 解封装）→ **PacketListModel**（Qt Model/View）→ **MainWindow**（标签页 + 表格）。双击打开 **PacketDetailWidget**，其中使用 **PacketDecoder**（纯静态方法）按需解码，并嵌入 **HexViewWidget**、**AudioWaveformWidget**、**AudioSpectrogramWidget** 或 `ScalableImageLabel` 显示视频帧。
 
-- `PacketReader` owns the `AVFormatContext` and stores metadata-only `QVector<PacketInfo>`. Raw packet data is read on-demand via seek+read (`readPacketData()`).
-- `PacketDecoder` is a **static-only utility class** — no instances. Each decode method opens its own `AVFormatContext` to avoid shared seek-state issues. Video P/B frames use chase decoding (seek to GOP keyframe → decode forward until PTS match, max 5000 packets guard).
-- All FFmpeg objects (`AVCodecContext`, `SwsContext`, `SwrContext`, `AVFrame`, `AVPacket`) are **manually allocated/freed** — no RAII wrappers. Every error path must release resources.
-- `StreamInfo::codecpar` is deep-copied via `avcodec_parameters_alloc()` + `avcodec_parameters_copy()` and freed in `PacketReader::close()`.
+- `PacketReader` 持有 `AVFormatContext`，仅存储元数据 `QVector<PacketInfo>`。原始 Packet 数据通过 seek+read 按需读取（`readPacketData()`）。
+- `PacketDecoder` 是**纯静态工具类** — 不创建实例。每个解码方法独立打开自己的 `AVFormatContext`，以避免共享 seek 状态问题。视频 P/B 帧使用追帧解码（seek 到 GOP 关键帧 → 向前解码直到 PTS 匹配，最多 5000 个 Packet 的安全上限）。
+- 所有 FFmpeg 对象（`AVCodecContext`、`SwsContext`、`SwrContext`、`AVFrame`、`AVPacket`）均**手动分配/释放** — 不使用 RAII 封装。每条错误路径都必须释放资源。
+- `StreamInfo::codecpar` 通过 `avcodec_parameters_alloc()` + `avcodec_parameters_copy()` 深拷贝，在 `PacketReader::close()` 中释放。
 
-## Build & Run
+## 构建与运行
 
-The project uses **CMake Tools extension** in VS Code as the primary workflow. Build/run/test configuration lives in `.vscode/`.
+项目使用 VS Code 的 **CMake Tools 扩展**作为主要工作流。构建/运行/测试配置位于 `.vscode/` 目录。
 
 ```bash
-# Build (VS Code: Ctrl+Shift+B, or CMake: Build command)
-# Equivalent terminal command:
+# 构建（VS Code: Ctrl+Shift+B，或 CMake: Build 命令）
+# 等价终端命令：
 cmake --build build/Debug
 
-# Run / Debug (VS Code: F5 launches GDB via launch.json, preLaunchTask auto-builds)
+# 运行 / 调试（VS Code: F5 通过 launch.json 启动 GDB；preLaunchTask 自动构建）
 
-# Tests
+# 测试
 ctest --test-dir build/Debug --output-on-failure
 ```
 
-Alternative: `make debug` / `make run` via the project Makefile (local paths in `config.mk`, not committed).
+替代方式：通过项目 Makefile 执行 `make debug` / `make run`（本地路径在 `config.mk` 中，未提交）。
 
-- `.vscode/settings.json` configures CMake generator (Ninja), compiler paths, vcpkg toolchain — these are the actual build settings.
-- `.vscode/launch.json` uses `${command:cmake.launchTargetPath}` with GDB; `preLaunchTask: "CMake: build"` ensures a fresh build before debug.
-- vcpkg auto-installs deps (FFmpeg, GTest) declared in `vcpkg.json` on first configure.
-- `GLOB_RECURSE` auto-collects `src/*.cpp` and `include/*.h` — no CMakeLists edit needed for new files.
-- Tests link against `VideoAnalyserLib` (static lib of all src/ except main.cpp), defined in `tests/CMakeLists.txt`.
+- `.vscode/settings.json` 配置 CMake 生成器（Ninja）、编译器路径、vcpkg 工具链 — 这些是实际的构建设置。
+- `.vscode/launch.json` 使用 `${command:cmake.launchTargetPath}` 配合 GDB；`preLaunchTask: "CMake: build"` 确保调试前自动构建。
+- vcpkg 在首次配置时自动安装 `vcpkg.json` 中声明的依赖（FFmpeg、GTest）。
+- `GLOB_RECURSE` 自动收集 `src/*.cpp` 和 `include/*.h` — 新增文件无需修改 CMakeLists.txt。
+- 测试链接 `VideoAnalyserLib`（排除 main.cpp 的所有 src/ 代码编译为静态库），定义在 `tests/CMakeLists.txt` 中。
 
-## Design Principles
+## 设计原则
 
-### Principle 1: Prefer mature library APIs — never reinvent the wheel
+### 原则一：优先使用成熟库 API — 绝不自造轮子
 
-Always use FFmpeg / Qt / STL APIs instead of hand-rolling equivalent logic:
+优先使用成熟库(ffmpeg, Qt, STL) API，不自行实现等价逻辑, 如果需要新功能，先查阅文档和社区资源，需要的第三方库通过 vcpkg 添加。当前依赖：`ffmpeg`（avcodec、avdevice、avfilter、avformat、swresample、swscale）、`gtest`。
 
-| Task | DO use | DO NOT write |
-|---|---|---|
-| Pixel format conversion | `sws_scale` / `sws_scale_frame` | Manual YUV→RGB |
-| Audio resample / format | `swr_convert` (libswresample) | Manual planar/interleaved/int16/float handling |
-| Timestamp conversion | `av_q2d()`, `av_rescale_q()` | Manual time_base math |
-| Binary search (keyframes) | `std::upper_bound` / `std::lower_bound` | Hand-written binary search |
-| String formatting | `QString::asprintf()`, `QString::number()` | Manual hex string concatenation |
-| Time formatting | `QTime::fromMSecsSinceStartOfDay().toString("HH:mm:ss.zzz")` | Manual h/m/s assembly |
-| Hex formatting | `QByteArray::toHex(' ')` | Byte-by-byte conversion |
-| Table sort/filter | `QSortFilterProxyModel` | Manual QVector sorting |
-| Image scaling | `QPixmap::scaled(Qt::KeepAspectRatio, Qt::SmoothTransformation)` | Manual scaling |
-| Waveform drawing | `QPainterPath` + `QPainter::drawPath()` | Per-pixel calculation |
-| Progress dialog | `QProgressDialog` | Custom progress bar |
-| Error code → text | `av_strerror()` | Manual error code map |
-| Codec name | `avcodec_get_name()` | Manual codec_id→name map |
-| Media type name | `av_get_media_type_string()` | Manual switch-case |
+### 原则二：所有非平凡函数必须有单元测试
 
-### Principle 2: Every non-trivial function must have unit tests
+- 每个 `src/<模块>.cpp` 对应一个 `tests/test_<模块>.cpp` 测试文件
+- 覆盖范围：正常路径 + 边界条件 + 错误处理
+- 涉及 FFmpeg 文件操作的测试使用 `tests/testdata/` 中的小型测试视频
+- 纯数据/格式化函数使用构造数据测试；UI 控件测试侧重数据逻辑而非渲染
 
-- Each `src/<module>.cpp` has a corresponding `tests/test_<module>.cpp`
-- Coverage: normal path + boundary conditions + error handling
-- FFmpeg file-dependent tests use small test videos in `tests/testdata/`
-- Pure data/formatting functions test with constructed data; UI widget tests focus on data logic, not rendering
+### 原则三：通过 vcpkg 添加新依赖
 
-### Principle 3: Add new deps via vcpkg
+当功能需要新库时，添加到 `vcpkg.json`。当前依赖：`ffmpeg`（avcodec、avdevice、avfilter、avformat、swresample、swscale）、`gtest`。
 
-When a feature needs a new library, add it to `vcpkg.json`. Current deps: `ffmpeg` (avcodec, avdevice, avfilter, avformat, swresample, swscale), `gtest`.
+## 编码规范
 
-## Conventions
+- **成员变量前缀**：`m_`（`m_formatCtx`、`m_packets`、`m_proxyModel`）
+- **列枚举前缀**：`Col`（`ColType`、`ColIndex`、...、`ColCount`）
+- **注释语言**：行内注释和结构体字段文档使用中文
+- **错误处理**：FFmpeg 错误 → `av_strerror()` → `QString`；reader 返回 `bool`，decoder 返回空结果 + 可选的 `QString *errorMsg`
+- **静态辅助函数暴露以供测试**：`PacketListModel::formatTime()`、`AudioWaveformWidget::downsample()`、`AudioSpectrogramWidget::computeSpectrogram()` 等声明为 `static`/public，专门用于单元测试直接调用。
 
-- **Member prefix**: `m_` (`m_formatCtx`, `m_packets`, `m_proxyModel`)
-- **Column enums**: `Col` prefix (`ColType`, `ColIndex`, ..., `ColCount`)
-- **Comments**: Chinese for inline comments and struct field docs
-- **Error handling**: FFmpeg errors → `av_strerror()` → `QString`; reader returns `bool`, decoder returns empty result + optional `QString *errorMsg`
-- **Static helpers exposed for testing**: `PacketListModel::formatTime()`, `AudioWaveformWidget::downsample()`, `AudioSpectrogramWidget::computeSpectrogram()`, etc. are `static`/public specifically so unit tests can call them directly.
+## 测试
 
-## Testing
+- 框架：**Google Test**，在 `tests/test_main.cpp` 中初始化 `QApplication`
+- 测试数据：`tests/testdata/test_h264_aac.mp4`（320×240 H.264+AAC，<1MB）。使用 `TEST_DATA_DIR` 宏定位文件。文件不存在时使用 `GTEST_SKIP()` 跳过。
+- Fixture 模式：`SetUp()` 创建 `PacketReader*` / model，`TearDown()` 删除；`makePacket()` 工厂函数生成合成的 `PacketInfo`。
+- 纯函数（formatTime、downsample、FFT 辅助函数）使用构造数据测试；文件相关测试使用真实 mp4。
+- 浮点断言：`EXPECT_NEAR` / `EXPECT_FLOAT_EQ`。
+- **每个新增的功能函数都需要在 `tests/test_<模块>.cpp` 中添加对应测试**。
 
-- Framework: **Google Test** with `QApplication` initialized in `tests/test_main.cpp`
-- Test data: `tests/testdata/test_h264_aac.mp4` (320×240 H.264+AAC, <1MB). Use `TEST_DATA_DIR` macro to locate it. When the file is missing, use `GTEST_SKIP()`.
-- Fixture pattern: `SetUp()` creates `PacketReader*` / model, `TearDown()` deletes; `makePacket()` factory for synthetic `PacketInfo`.
-- Pure functions (formatTime, downsample, FFT helpers) are tested with constructed data; file-dependent tests use the real mp4.
-- Float assertions: `EXPECT_NEAR` / `EXPECT_FLOAT_EQ`.
-- **Every new non-trivial function needs a corresponding test** in `tests/test_<module>.cpp`.
+## 关键文件
 
-## Key Files
-
-| Path | Role |
+| 路径 | 职责 |
 |---|---|
-| `include/packetreader.h` | `PacketInfo` / `StreamInfo` structs, `PacketReader` class |
-| `include/packetdecoder.h` | Static decode API (`decodeVideoPacket`, `decodeAudioPacket`, `decodeSubtitlePacket`) |
-| `include/packetlistmodel.h` | Table model + `PacketFilterProxyModel` |
-| `src/mainwindow.cpp` | UI setup, file open (incl. drag-drop), tab management, filtering |
-| `tests/CMakeLists.txt` | `VideoAnalyserLib` static lib target + test executable config |
+| `include/packetreader.h` | `PacketInfo` / `StreamInfo` 结构体，`PacketReader` 类 |
+| `include/packetdecoder.h` | 静态解码 API（`decodeVideoPacket`、`decodeAudioPacket`、`decodeSubtitlePacket`） |
+| `include/packetlistmodel.h` | 表格模型 + `PacketFilterProxyModel` |
+| `src/mainwindow.cpp` | UI 搭建、文件打开（含拖拽）、标签页管理、筛选 |
+| `tests/CMakeLists.txt` | `VideoAnalyserLib` 静态库目标 + 测试可执行文件配置 |
