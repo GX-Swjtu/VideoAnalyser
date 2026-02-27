@@ -1,6 +1,6 @@
 enable_testing()
 find_package(GTest REQUIRED)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Concurrent)
 find_package(FFMPEG REQUIRED)
 
 # 将业务逻辑编译为静态库供测试链接（排除 main.cpp）
@@ -16,6 +16,7 @@ target_include_directories(VideoAnalyserLib PUBLIC
 target_link_directories(VideoAnalyserLib PUBLIC ${FFMPEG_LIBRARY_DIRS})
 target_link_libraries(VideoAnalyserLib PUBLIC
     Qt${QT_VERSION_MAJOR}::Widgets
+    Qt${QT_VERSION_MAJOR}::Concurrent
     ${FFMPEG_LIBRARIES}
     -lswscale
     -lswresample

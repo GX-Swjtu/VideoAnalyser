@@ -16,6 +16,9 @@
 #include <QScrollArea>
 #include <QApplication>
 #include <QResizeEvent>
+#include <QtConcurrent/QtConcurrent>
+
+#include <memory>
 
 // --- ScalableImageLabel implementation ---
 ScalableImageLabel::ScalableImageLabel(QWidget *parent)
@@ -55,6 +58,7 @@ extern "C" {
 PacketDetailWidget::PacketDetailWidget(PacketReader *reader, int packetIndex, QWidget *parent)
     : QWidget(parent)
     , m_packetIndex(packetIndex)
+    , m_reader(reader)
 {
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
@@ -83,9 +87,19 @@ PacketDetailWidget::PacketDetailWidget(PacketReader *reader, int packetIndex, QW
     buildMetadataTree(reader, packetIndex);
     buildContentTabs(reader, packetIndex);
 
+    // Hex 懒加载：切换 tab 时按需读取
+    connect(m_contentTabs, &QTabWidget::currentChanged, this, &PacketDetailWidget::onTabChanged);
+
     m_metadataTree->expandAll();
     m_metadataTree->resizeColumnToContents(0);
     m_metadataTree->resizeColumnToContents(1);
+}
+
+PacketDetailWidget::~PacketDetailWidget()
+{
+    // QFutureWatcher 析构时会 waitForFinished()，保证后台线程安全结束
+    delete m_videoWatcher;
+    delete m_audioWatcher;
 }
 
 void PacketDetailWidget::buildMetadataTree(PacketReader *reader, int packetIndex)
@@ -156,56 +170,69 @@ void PacketDetailWidget::buildContentTabs(PacketReader *reader, int packetIndex)
 
     // 优先添加解码内容标签，Hex 放在最后
 
-    // 视频帧（优先显示）
+    // 视频帧（异步解码）
     if (pkt.mediaType == AVMEDIA_TYPE_VIDEO) {
-        auto *imageLabel = new ScalableImageLabel();
+        m_imageLabel = new ScalableImageLabel();
+        m_imageLabel->setText(QStringLiteral("正在解码..."));
+        m_contentTabs->addTab(m_imageLabel, QStringLiteral("视频帧"));
 
-        // 尝试解码
-        QApplication::setOverrideCursor(Qt::WaitCursor);
-        QString errMsg;
-        QImage frame = PacketDecoder::decodeVideoPacket(reader, packetIndex, &errMsg);
-        QApplication::restoreOverrideCursor();
+        // 在后台线程创建独立的 PacketDecoder 实例并执行解码
+        // 使用 shared_ptr 保证 lambda 中安全持有生命周期
+        auto decoder = std::make_shared<PacketDecoder>(reader);
+        int idx = packetIndex;
 
-        if (!frame.isNull()) {
-            imageLabel->setOriginalImage(frame);
-        } else {
-            imageLabel->setText(QStringLiteral("解码失败: %1").arg(errMsg));
-        }
+        m_videoWatcher = new QFutureWatcher<QImage>(this);
+        connect(m_videoWatcher, &QFutureWatcher<QImage>::finished,
+                this, &PacketDetailWidget::onVideoDecoded);
 
-        m_contentTabs->addTab(imageLabel, QStringLiteral("视频帧"));
+        QFuture<QImage> future = QtConcurrent::run([decoder, idx]() -> QImage {
+            QString err;
+            if (!decoder->open(&err)) {
+                qWarning() << "PacketDecoder open failed:" << err;
+                return QImage();
+            }
+            return decoder->decodeVideoPacket(idx, nullptr);
+        });
+        m_videoWatcher->setFuture(future);
     }
 
-    // 音频频谱 + 波形（优先显示）
+    // 音频频谱 + 波形（异步解码）
     if (pkt.mediaType == AVMEDIA_TYPE_AUDIO) {
-        QApplication::setOverrideCursor(Qt::WaitCursor);
-        QString errMsg;
-        AudioData audioData = PacketDecoder::decodeAudioPacket(reader, packetIndex, &errMsg);
-        QApplication::restoreOverrideCursor();
+        m_spectrogram = new AudioSpectrogramWidget();
+        m_contentTabs->addTab(m_spectrogram, QStringLiteral("频谱"));
 
-        // 频谱图（第一标签页）
-        auto *spectrogram = new AudioSpectrogramWidget();
-        if (!audioData.samples.isEmpty()) {
-            spectrogram->setAudioData(audioData);
-        }
-        m_contentTabs->addTab(spectrogram, QStringLiteral("频谱"));
+        m_waveform = new AudioWaveformWidget();
+        m_contentTabs->addTab(m_waveform, QStringLiteral("波形"));
 
-        // 波形图（第二标签页）
-        auto *waveform = new AudioWaveformWidget();
-        if (!audioData.samples.isEmpty()) {
-            waveform->setAudioData(audioData);
-        }
-        m_contentTabs->addTab(waveform, QStringLiteral("波形"));
+        auto decoder = std::make_shared<PacketDecoder>(reader);
+        int idx = packetIndex;
+
+        m_audioWatcher = new QFutureWatcher<AudioData>(this);
+        connect(m_audioWatcher, &QFutureWatcher<AudioData>::finished,
+                this, &PacketDetailWidget::onAudioDecoded);
+
+        QFuture<AudioData> future = QtConcurrent::run([decoder, idx]() -> AudioData {
+            QString err;
+            if (!decoder->open(&err)) {
+                qWarning() << "PacketDecoder open failed:" << err;
+                return AudioData();
+            }
+            return decoder->decodeAudioPacket(idx, nullptr);
+        });
+        m_audioWatcher->setFuture(future);
     }
 
-    // 字幕文本（优先显示）
+    // 字幕文本（同步解码，通常很快）
     if (pkt.mediaType == AVMEDIA_TYPE_SUBTITLE) {
         auto *textEdit = new QTextEdit();
         textEdit->setReadOnly(true);
 
-        QApplication::setOverrideCursor(Qt::WaitCursor);
+        PacketDecoder decoder(reader);
         QString errMsg;
-        QString text = PacketDecoder::decodeSubtitlePacket(reader, packetIndex, &errMsg);
-        QApplication::restoreOverrideCursor();
+        QString text;
+        // 字幕解码通过 readPacketData 读原始数据，不需要 open m_fmtCtx
+        // 但为了保持接口一致性仍使用实例方法
+        text = decoder.decodeSubtitlePacket(packetIndex, &errMsg);
 
         if (!text.isEmpty()) {
             textEdit->setText(text);
@@ -215,13 +242,47 @@ void PacketDetailWidget::buildContentTabs(PacketReader *reader, int packetIndex)
         m_contentTabs->addTab(textEdit, QStringLiteral("字幕"));
     }
 
-    // Hex 视图放在最后（所有类型都有）
-    QByteArray rawData = reader->readPacketData(packetIndex);
-    auto *hexView = new HexViewWidget();
-    hexView->setData(rawData);
-    hexView->setBaseOffset(pkt.pos >= 0 ? pkt.pos : 0);
-    m_contentTabs->addTab(hexView, QStringLiteral("Hex"));
+    // Hex 视图放在最后（所有类型都有）— 懒加载，不立即读取数据
+    m_hexView = new HexViewWidget();
+    m_hexView->setBaseOffset(pkt.pos >= 0 ? pkt.pos : 0);
+    m_hexTabIndex = m_contentTabs->addTab(m_hexView, QStringLiteral("Hex"));
 
     // 默认选中第一个标签（解码内容）
     m_contentTabs->setCurrentIndex(0);
+}
+
+// ---- 异步解码回调 ----
+
+void PacketDetailWidget::onVideoDecoded()
+{
+    if (!m_videoWatcher || !m_imageLabel) return;
+
+    QImage frame = m_videoWatcher->result();
+    if (!frame.isNull()) {
+        m_imageLabel->setOriginalImage(frame);
+    } else {
+        m_imageLabel->setText(QStringLiteral("解码失败"));
+    }
+}
+
+void PacketDetailWidget::onAudioDecoded()
+{
+    if (!m_audioWatcher) return;
+
+    AudioData audioData = m_audioWatcher->result();
+    if (!audioData.samples.isEmpty()) {
+        if (m_spectrogram) m_spectrogram->setAudioData(audioData);
+        if (m_waveform) m_waveform->setAudioData(audioData);
+    }
+}
+
+// ---- Hex 懒加载 ----
+
+void PacketDetailWidget::onTabChanged(int index)
+{
+    if (index == m_hexTabIndex && !m_hexLoaded && m_hexView && m_reader) {
+        QByteArray rawData = m_reader->readPacketData(m_packetIndex);
+        m_hexView->setData(rawData);
+        m_hexLoaded = true;
+    }
 }

@@ -16,9 +16,19 @@ protected:
         reader = new PacketReader();
     }
     void TearDown() override {
+        delete decoder;
         delete reader;
     }
     PacketReader *reader = nullptr;
+    PacketDecoder *decoder = nullptr;
+
+    // 打开文件并初始化 decoder（在需要文件的测试中调用）
+    bool openFile(const QString &path) {
+        if (!reader->open(path)) return false;
+        if (!reader->readAllPackets()) return false;
+        decoder = new PacketDecoder(reader);
+        return decoder->open();
+    }
 
     int findFirstPacketOfType(AVMediaType type) {
         for (int i = 0; i < reader->packetCount(); ++i) {
@@ -44,8 +54,7 @@ TEST_F(PacketDecoderTest, DecodeKeyFrame) {
         GTEST_SKIP() << "Test file not found";
     }
 
-    ASSERT_TRUE(reader->open(path));
-    ASSERT_TRUE(reader->readAllPackets());
+    ASSERT_TRUE(openFile(path));
 
     int idx = findFirstPacketOfType(AVMEDIA_TYPE_VIDEO);
     ASSERT_GE(idx, 0);
@@ -54,7 +63,7 @@ TEST_F(PacketDecoderTest, DecodeKeyFrame) {
     EXPECT_TRUE(reader->packetAt(idx).flags & AV_PKT_FLAG_KEY);
 
     QString err;
-    QImage img = PacketDecoder::decodeVideoPacket(reader, idx, &err);
+    QImage img = decoder->decodeVideoPacket(idx, &err);
     EXPECT_FALSE(img.isNull()) << "Error: " << err.toStdString();
 }
 
@@ -64,13 +73,12 @@ TEST_F(PacketDecoderTest, DecodeKeyFrameDimensions) {
         GTEST_SKIP() << "Test file not found";
     }
 
-    ASSERT_TRUE(reader->open(path));
-    ASSERT_TRUE(reader->readAllPackets());
+    ASSERT_TRUE(openFile(path));
 
     int idx = findFirstPacketOfType(AVMEDIA_TYPE_VIDEO);
     ASSERT_GE(idx, 0);
 
-    QImage img = PacketDecoder::decodeVideoPacket(reader, idx);
+    QImage img = decoder->decodeVideoPacket(idx);
     ASSERT_FALSE(img.isNull());
 
     // 测试视频是 320x240
@@ -84,8 +92,7 @@ TEST_F(PacketDecoderTest, DecodePBFrame) {
         GTEST_SKIP() << "Test file not found";
     }
 
-    ASSERT_TRUE(reader->open(path));
-    ASSERT_TRUE(reader->readAllPackets());
+    ASSERT_TRUE(openFile(path));
 
     int idx = findFirstNonKeyVideoPacket();
     if (idx < 0) {
@@ -93,7 +100,7 @@ TEST_F(PacketDecoderTest, DecodePBFrame) {
     }
 
     QString err;
-    QImage img = PacketDecoder::decodeVideoPacket(reader, idx, &err);
+    QImage img = decoder->decodeVideoPacket(idx, &err);
     EXPECT_FALSE(img.isNull()) << "Error: " << err.toStdString();
 }
 
@@ -103,14 +110,13 @@ TEST_F(PacketDecoderTest, DecodeAudioPacket) {
         GTEST_SKIP() << "Test file not found";
     }
 
-    ASSERT_TRUE(reader->open(path));
-    ASSERT_TRUE(reader->readAllPackets());
+    ASSERT_TRUE(openFile(path));
 
     int idx = findFirstPacketOfType(AVMEDIA_TYPE_AUDIO);
     ASSERT_GE(idx, 0);
 
     QString err;
-    AudioData data = PacketDecoder::decodeAudioPacket(reader, idx, &err);
+    AudioData data = decoder->decodeAudioPacket(idx, &err);
     EXPECT_FALSE(data.samples.isEmpty()) << "Error: " << err.toStdString();
     EXPECT_GT(data.sampleRate, 0);
     EXPECT_GT(data.channels, 0);
@@ -122,13 +128,12 @@ TEST_F(PacketDecoderTest, DecodeAudioFormat) {
         GTEST_SKIP() << "Test file not found";
     }
 
-    ASSERT_TRUE(reader->open(path));
-    ASSERT_TRUE(reader->readAllPackets());
+    ASSERT_TRUE(openFile(path));
 
     int idx = findFirstPacketOfType(AVMEDIA_TYPE_AUDIO);
     ASSERT_GE(idx, 0);
 
-    AudioData data = PacketDecoder::decodeAudioPacket(reader, idx);
+    AudioData data = decoder->decodeAudioPacket(idx);
     ASSERT_FALSE(data.samples.isEmpty());
 
     // 采样值应该在合理范围内（float，约 -1.0 ~ 1.0 但可能略超）
@@ -144,8 +149,7 @@ TEST_F(PacketDecoderTest, DecodeAudioPacketNonSilent) {
         GTEST_SKIP() << "Test file not found";
     }
 
-    ASSERT_TRUE(reader->open(path));
-    ASSERT_TRUE(reader->readAllPackets());
+    ASSERT_TRUE(openFile(path));
 
     // 找一个非首个的音频包（避免 priming 帧问题）
     int audioCount = 0;
@@ -164,7 +168,7 @@ TEST_F(PacketDecoderTest, DecodeAudioPacketNonSilent) {
     }
 
     QString err;
-    AudioData data = PacketDecoder::decodeAudioPacket(reader, idx, &err);
+    AudioData data = decoder->decodeAudioPacket(idx, &err);
     ASSERT_FALSE(data.samples.isEmpty()) << "Error: " << err.toStdString();
 
     // 验证不全是静音（最大振幅 > 0.001）
@@ -182,15 +186,14 @@ TEST_F(PacketDecoderTest, InvalidPacketIndex) {
         GTEST_SKIP() << "Test file not found";
     }
 
-    ASSERT_TRUE(reader->open(path));
-    ASSERT_TRUE(reader->readAllPackets());
+    ASSERT_TRUE(openFile(path));
 
     QString err;
-    QImage img = PacketDecoder::decodeVideoPacket(reader, -1, &err);
+    QImage img = decoder->decodeVideoPacket(-1, &err);
     EXPECT_TRUE(img.isNull());
     EXPECT_FALSE(err.isEmpty());
 
-    img = PacketDecoder::decodeVideoPacket(reader, 999999, &err);
+    img = decoder->decodeVideoPacket(999999, &err);
     EXPECT_TRUE(img.isNull());
 }
 
@@ -200,27 +203,83 @@ TEST_F(PacketDecoderTest, VideoStreamOnlyPacket) {
         GTEST_SKIP() << "Test file not found";
     }
 
-    ASSERT_TRUE(reader->open(path));
-    ASSERT_TRUE(reader->readAllPackets());
+    ASSERT_TRUE(openFile(path));
 
     // 对音频 Packet 调用 decodeVideoPacket
     int audioIdx = findFirstPacketOfType(AVMEDIA_TYPE_AUDIO);
     if (audioIdx >= 0) {
         QString err;
-        QImage img = PacketDecoder::decodeVideoPacket(reader, audioIdx, &err);
+        QImage img = decoder->decodeVideoPacket(audioIdx, &err);
         EXPECT_TRUE(img.isNull());
     }
 }
 
 TEST_F(PacketDecoderTest, NullReader) {
+    PacketDecoder nullDecoder(nullptr);
     QString err;
-    QImage img = PacketDecoder::decodeVideoPacket(nullptr, 0, &err);
+    QImage img = nullDecoder.decodeVideoPacket(0, &err);
     EXPECT_TRUE(img.isNull());
     EXPECT_FALSE(err.isEmpty());
 
-    AudioData ad = PacketDecoder::decodeAudioPacket(nullptr, 0, &err);
+    AudioData ad = nullDecoder.decodeAudioPacket(0, &err);
     EXPECT_TRUE(ad.samples.isEmpty());
 
-    QString st = PacketDecoder::decodeSubtitlePacket(nullptr, 0, &err);
+    QString st = nullDecoder.decodeSubtitlePacket(0, &err);
     EXPECT_TRUE(st.isEmpty());
+}
+
+// 验证同一实例连续解码多个不同 packet（Context 复用正确性）
+TEST_F(PacketDecoderTest, ReuseContextMultipleDecodes) {
+    QString path = testFile("test_h264_aac.mp4");
+    if (!QFile::exists(path)) {
+        GTEST_SKIP() << "Test file not found";
+    }
+
+    ASSERT_TRUE(openFile(path));
+
+    // 找第一个和第二个视频包
+    int first = -1, second = -1;
+    for (int i = 0; i < reader->packetCount(); ++i) {
+        if (reader->packetAt(i).mediaType == AVMEDIA_TYPE_VIDEO) {
+            if (first < 0) first = i;
+            else if (second < 0) { second = i; break; }
+        }
+    }
+    ASSERT_GE(first, 0);
+    ASSERT_GE(second, 0);
+
+    QImage img1 = decoder->decodeVideoPacket(first);
+    EXPECT_FALSE(img1.isNull());
+
+    QImage img2 = decoder->decodeVideoPacket(second);
+    EXPECT_FALSE(img2.isNull());
+}
+
+// 验证 open / close / 重新 open 的生命周期
+TEST_F(PacketDecoderTest, OpenCloseCycle) {
+    QString path = testFile("test_h264_aac.mp4");
+    if (!QFile::exists(path)) {
+        GTEST_SKIP() << "Test file not found";
+    }
+
+    ASSERT_TRUE(reader->open(path));
+    ASSERT_TRUE(reader->readAllPackets());
+
+    decoder = new PacketDecoder(reader);
+    ASSERT_TRUE(decoder->open());
+    EXPECT_TRUE(decoder->isOpen());
+
+    int idx = findFirstPacketOfType(AVMEDIA_TYPE_VIDEO);
+    ASSERT_GE(idx, 0);
+
+    QImage img1 = decoder->decodeVideoPacket(idx);
+    EXPECT_FALSE(img1.isNull());
+
+    decoder->close();
+    EXPECT_FALSE(decoder->isOpen());
+
+    // 重新打开后应能继续解码
+    ASSERT_TRUE(decoder->open());
+    QImage img2 = decoder->decodeVideoPacket(idx);
+    EXPECT_FALSE(img2.isNull());
 }

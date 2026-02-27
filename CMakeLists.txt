@@ -18,8 +18,8 @@ set(I18N_DIR ${CMAKE_SOURCE_DIR}/i18n)
 # AUTOUIC 搜索 ui 目录
 set(CMAKE_AUTOUIC_SEARCH_PATHS ${UI_DIR})
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets LinguistTools)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets LinguistTools)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets LinguistTools Concurrent)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets LinguistTools Concurrent)
 
 # FFmpeg
 find_package(FFMPEG REQUIRED)
@@ -59,7 +59,7 @@ endif()
 
 target_include_directories(VideoAnalyser PRIVATE ${INCLUDE_DIR} ${FFMPEG_INCLUDE_DIRS})
 target_link_directories(VideoAnalyser PRIVATE ${FFMPEG_LIBRARY_DIRS})
-target_link_libraries(VideoAnalyser PRIVATE Qt${QT_VERSION_MAJOR}::Widgets ${FFMPEG_LIBRARIES} -lswscale -lswresample)
+target_link_libraries(VideoAnalyser PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Concurrent ${FFMPEG_LIBRARIES} -lswscale -lswresample)
 
 # 平台相关的目标属性
 if(${QT_VERSION} VERSION_LESS 6.1.0)

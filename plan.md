@@ -27,10 +27,14 @@
 | Hex 视图 | 自定义 QAbstractScrollArea | 高性能，支持大数据 |
 | 数据存储策略 | 内存只存元数据，按需从文件读取原始数据 | 用户选择，大文件友好 |
 | P/B 帧解码 | av_seek_frame 到最近关键帧 → 连续送帧追帧解码 → PTS 匹配目标帧 | 正确解码非关键帧的唯一方式 |
-| 额外 Qt 模块 | 不添加，仅用 Widgets | 所有功能可用 Widgets + 自定义绘制实现 |
+| 额外 Qt 模块 | Widgets + Concurrent | Concurrent 用于异步解码，避免阻塞 UI |
 | C++ 标准 | C++17 | 已配置 |
 | 单元测试框架 | Google Test (gtest) | vcpkg 已安装，CMake 原生支持 |
 | 依赖管理 | vcpkg | 需要新库（如 OpenCV）时通过 vcpkg.json 添加 |
+| 视频/音频解码 | QtConcurrent::run + QFutureWatcher 异步解码 | 详情窗口立即弹出，解码在后台线程执行，不阻塞 UI |
+| PacketDecoder 架构 | 可实例化类，持有独立 AVFormatContext | 避免每次解码重新 open + find_stream_info 的数百毫秒开销 |
+| SwsContext 复用 | PacketDecoder 实例内缓存 SwsContext | 同分辨率/像素格式帧转换时复用，减少重复分配 |
+| Hex 数据加载 | 懒加载，切到 Hex tab 时才读取 | 减少详情窗口构造时的 I/O 开销 |
 
 ---
 
@@ -446,21 +450,53 @@ private:
 
 **文件**：`include/packetdecoder.h` + `src/packetdecoder.cpp`
 
-**接口**：
+**接口**（实例类，持有独立 AVFormatContext 以复用）：
 
 ```cpp
 class PacketDecoder {
 public:
+    explicit PacketDecoder(PacketReader *reader);
+    ~PacketDecoder();
+
+    // 禁止拷贝
+    PacketDecoder(const PacketDecoder &) = delete;
+    PacketDecoder &operator=(const PacketDecoder &) = delete;
+
+    // 打开独立的 AVFormatContext（仅需调用一次）
+    bool open(QString *errorMsg = nullptr);
+    void close();
+    bool isOpen() const;
+
     // 视频解码（追帧）- 返回解码后的 QImage，失败返回空 QImage
-    static QImage decodeVideoPacket(PacketReader *reader, int packetIndex, QString *errorMsg = nullptr);
+    QImage decodeVideoPacket(int packetIndex, QString *errorMsg = nullptr);
 
     // 音频解码 - 返回 PCM 浮点数据
-    static AudioData decodeAudioPacket(PacketReader *reader, int packetIndex, QString *errorMsg = nullptr);
+    AudioData decodeAudioPacket(int packetIndex, QString *errorMsg = nullptr);
 
-    // 字幕解码 - 返回文本
-    static QString decodeSubtitlePacket(PacketReader *reader, int packetIndex, QString *errorMsg = nullptr);
+    // 字幕解码 - 返回文本（不使用 m_fmtCtx，通过 readPacketData 读原始数据）
+    QString decodeSubtitlePacket(int packetIndex, QString *errorMsg = nullptr);
+
+    static QString ffmpegError(int errnum);
+
+private:
+    PacketReader *m_reader = nullptr;
+    AVFormatContext *m_fmtCtx = nullptr;     // 独立的格式上下文，open() 时创建，close() 时销毁
+    SwsContext *m_swsCtx = nullptr;          // 缓存的色彩转换上下文
+    int m_swsWidth = 0, m_swsHeight = 0;
+    int m_swsSrcFmt = -1;
 };
 ```
+
+**性能优化设计**：
+
+| 优化项 | 旧实现 | 新实现 | 效果 |
+|---|---|---|---|
+| AVFormatContext | 每次解码 open + find_stream_info + close | 实例持有，open() 一次复用 | 省去数百毫秒/次 |
+| SwsContext | 每次解码 sws_getContext + sws_freeContext | 实例内缓存，参数不变时复用 | 减少重复分配 |
+| 线程模型 | 同步阻塞 UI 主线程 | QtConcurrent::run 后台解码 | UI 不冻结 |
+| Hex 数据 | 构造时立即 readPacketData | 切到 Hex tab 时才读取 | 减少构造时 I/O |
+
+**生命周期管理**：在异步解码场景中，`PacketDecoder` 通过 `std::shared_ptr` 传入 `QtConcurrent::run` 的 lambda，lambda 执行完毕后自动析构释放资源。如果用户关闭窗口，`QFutureWatcher` 析构时会 `waitForFinished()`，保证安全。
 
 #### 5a. 视频解码（关键帧追帧）
 
@@ -586,8 +622,12 @@ decodeSubtitlePacket(reader, targetIndex):
 | `DecodePBFrame` | 解码 P/B 帧（追帧），返回非空 QImage |
 | `DecodeAudioPacket` | 解码音频 Packet，返回 samples 非空、sampleRate > 0、channels > 0 |
 | `DecodeAudioFormat` | 验证返回的 float 采样在 -1.0 ~ 1.0 范围内（或合理范围） |
+| `DecodeAudioPacketNonSilent` | 非首个音频包解码后最大振幅 > 0.001（非静音） |
 | `InvalidPacketIndex` | 传入越界索引，返回空结果 + 错误信息，不崩溃 |
 | `VideoStreamOnlyPacket` | 对音频 Packet 调用 decodeVideoPacket，返回空 QImage |
+| `NullReader` | 传入 nullptr reader，各方法返回空结果 + 错误信息 |
+| `ReuseContextMultipleDecodes` | 同一实例连续解码多个不同 packet，验证 Context 复用正确性 |
+| `OpenCloseCycle` | open → 解码 → close → 重新 open → 解码，验证生命周期管理 |
 
 ---
 
@@ -621,59 +661,77 @@ decodeSubtitlePacket(reader, targetIndex):
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-**构造逻辑**：
+**构造逻辑**（异步解码 + 懒加载）：
 
 ```cpp
 PacketDetailWidget::PacketDetailWidget(PacketReader *reader, int packetIndex, QWidget *parent)
 {
-    const PacketInfo &pkt = reader->packetAt(packetIndex);
-    const StreamInfo &stream = reader->streams()[pkt.streamIndex];
+    // ... 构建 QSplitter + QTabWidget + QTreeWidget 布局 ...
+    buildMetadataTree(reader, packetIndex);  // 元数据树（纯内存操作，同步）
+    buildContentTabs(reader, packetIndex);   // 内容标签页（异步解码）
 
-    // 1. 构建元数据 QTreeWidget（如上图）
+    // Hex 懒加载：切换 tab 时按需读取
+    connect(m_contentTabs, &QTabWidget::currentChanged, this, &PacketDetailWidget::onTabChanged);
+}
 
-    // 2. 加载 Hex 数据（异步或延迟加载）
-    QByteArray rawData = reader->readPacketData(packetIndex);
-    HexViewWidget *hexView = new HexViewWidget();
-    hexView->setData(rawData);
-    hexView->setBaseOffset(pkt.pos);  // 显示文件中的实际地址
-
-    // 3. 根据媒体类型创建解码内容标签
-    QTabWidget *contentTabs = new QTabWidget();
-    contentTabs->addTab(hexView, "Hex");
-
+void PacketDetailWidget::buildContentTabs(PacketReader *reader, int packetIndex)
+{
+    // 视频帧 — 异步解码
     if (pkt.mediaType == AVMEDIA_TYPE_VIDEO) {
-        // 视频：解码并显示帧图片
-        QString errMsg;
-        QImage frame = PacketDecoder::decodeVideoPacket(reader, packetIndex, &errMsg);
-        QLabel *imageLabel = new QLabel();
-        if (!frame.isNull()) {
-            imageLabel->setPixmap(QPixmap::fromImage(frame).scaled(..., Qt::KeepAspectRatio));
-        } else {
-            imageLabel->setText("解码失败: " + errMsg);
-        }
-        contentTabs->addTab(imageLabel, "视频帧");
+        m_imageLabel = new ScalableImageLabel();
+        m_imageLabel->setText("正在解码...");
+        m_contentTabs->addTab(m_imageLabel, "视频帧");
+
+        // 后台线程创建独立 PacketDecoder 实例并执行解码
+        auto decoder = std::make_shared<PacketDecoder>(reader);
+        m_videoWatcher = new QFutureWatcher<QImage>(this);
+        connect(m_videoWatcher, &QFutureWatcher<QImage>::finished,
+                this, &PacketDetailWidget::onVideoDecoded);
+        m_videoWatcher->setFuture(QtConcurrent::run([decoder, idx]() -> QImage {
+            decoder->open();
+            return decoder->decodeVideoPacket(idx, nullptr);
+        }));
     }
 
+    // 音频 — 异步解码（频谱 + 波形同时更新）
     if (pkt.mediaType == AVMEDIA_TYPE_AUDIO) {
-        // 音频：解码并显示波形
-        QString errMsg;
-        AudioData audioData = PacketDecoder::decodeAudioPacket(reader, packetIndex, &errMsg);
-        AudioWaveformWidget *waveform = new AudioWaveformWidget();
-        if (!audioData.samples.isEmpty()) {
-            waveform->setAudioData(audioData);
-        }
-        contentTabs->addTab(waveform, "波形");
+        m_spectrogram = new AudioSpectrogramWidget();
+        m_waveform = new AudioWaveformWidget();
+        // ... 类似视频的 QtConcurrent::run + QFutureWatcher<AudioData> ...
     }
 
-    if (pkt.mediaType == AVMEDIA_TYPE_SUBTITLE) {
-        // 字幕：解码并显示文本
-        QString text = PacketDecoder::decodeSubtitlePacket(reader, packetIndex);
-        QTextEdit *textEdit = new QTextEdit();
-        textEdit->setReadOnly(true);
-        textEdit->setText(text);
-        contentTabs->addTab(textEdit, "字幕");
+    // 字幕 — 同步解码（通常很快）
+    if (pkt.mediaType == AVMEDIA_TYPE_SUBTITLE) { /* ... */ }
+
+    // Hex — 懒加载：创建空 HexViewWidget，切到 tab 时才调用 readPacketData
+    m_hexView = new HexViewWidget();
+    m_hexTabIndex = m_contentTabs->addTab(m_hexView, "Hex");
+}
+
+void PacketDetailWidget::onTabChanged(int index)
+{
+    if (index == m_hexTabIndex && !m_hexLoaded) {
+        m_hexView->setData(m_reader->readPacketData(m_packetIndex));
+        m_hexLoaded = true;
     }
 }
+```
+
+**异步解码关键成员**：
+
+```cpp
+class PacketDetailWidget : public QWidget {
+    // ...
+private:
+    QFutureWatcher<QImage> *m_videoWatcher = nullptr;
+    QFutureWatcher<AudioData> *m_audioWatcher = nullptr;
+    ScalableImageLabel *m_imageLabel = nullptr;       // 视频异步更新
+    AudioWaveformWidget *m_waveform = nullptr;         // 音频异步更新
+    AudioSpectrogramWidget *m_spectrogram = nullptr;   // 音频异步更新
+    HexViewWidget *m_hexView = nullptr;                // Hex 懒加载
+    int m_hexTabIndex = -1;
+    bool m_hexLoaded = false;
+};
 ```
 
 ---
@@ -886,9 +944,9 @@ Phase 9: 编译验证与集成调试         (全部完成后)
 
 ## 风险与注意事项
 
-1. **P/B 帧追帧性能**：GOP 长度可能很大（如 250 帧），追帧解码可能需要几秒。可在详情页显示加载进度
+1. **P/B 帧追帧性能**：GOP 长度可能很大（如 250 帧），追帧解码可能需要几秒。已通过 QtConcurrent 异步解码解决 UI 冻结问题，解码期间显示“正在解码...”占位文本
 2. **av_seek_frame 精度**：seek 可能不精确，需要在 seek 后循环 read_frame 并比对 pts/dts 来确认位置
-3. **多次 seek 的线程安全**：`AVFormatContext` 不是线程安全的。如果需要并行解码多个 Packet，需要加锁或为每次解码单独打开文件
+3. **多次 seek 的线程安全**：`AVFormatContext` 不是线程安全的。每个 `PacketDecoder` 实例持有独立的 `AVFormatContext`，可安全在后台线程中使用。`PacketReader::readPacketData()` 使用共享 `m_formatCtx`，仅在主线程调用（Hex 懒加载时）
 4. **大文件 Packet 数量**：1 小时视频可能有数十万个 Packet。QAbstractTableModel 本身可以处理，但 readAllPackets 可能需要较长时间
 5. **内存管理**：所有 FFmpeg 资源（AVFormatContext, AVCodecContext, AVFrame, AVPacket, SwsContext, SwrContext）必须正确释放
 6. **FFmpeg 错误处理**：所有 FFmpeg 函数调用都需检查返回值，使用 `av_strerror()` 获取描述

@@ -12,6 +12,58 @@ extern "C" {
 
 #include <QDebug>
 
+// ---- 构造 / 析构 / open / close ----
+
+PacketDecoder::PacketDecoder(PacketReader *reader)
+    : m_reader(reader)
+{
+}
+
+PacketDecoder::~PacketDecoder()
+{
+    close();
+}
+
+bool PacketDecoder::open(QString *errorMsg)
+{
+    if (m_fmtCtx) return true; // 已经打开
+    if (!m_reader || !m_reader->isOpen()) {
+        if (errorMsg) *errorMsg = QStringLiteral("Reader is null or not open");
+        return false;
+    }
+
+    QByteArray pathUtf8 = m_reader->filePath().toUtf8();
+    int ret = avformat_open_input(&m_fmtCtx, pathUtf8.constData(), nullptr, nullptr);
+    if (ret < 0) {
+        if (errorMsg) *errorMsg = QStringLiteral("Failed to open file: %1").arg(ffmpegError(ret));
+        m_fmtCtx = nullptr;
+        return false;
+    }
+    ret = avformat_find_stream_info(m_fmtCtx, nullptr);
+    if (ret < 0) {
+        if (errorMsg) *errorMsg = QStringLiteral("Failed to find stream info: %1").arg(ffmpegError(ret));
+        avformat_close_input(&m_fmtCtx);
+        return false;
+    }
+    return true;
+}
+
+void PacketDecoder::close()
+{
+    if (m_swsCtx) {
+        sws_freeContext(m_swsCtx);
+        m_swsCtx = nullptr;
+        m_swsWidth = 0;
+        m_swsHeight = 0;
+        m_swsSrcFmt = -1;
+    }
+    if (m_fmtCtx) {
+        avformat_close_input(&m_fmtCtx);
+    }
+}
+
+// ---- 静态工具函数 ----
+
 QString PacketDecoder::ffmpegError(int errnum)
 {
     char buf[AV_ERROR_MAX_STRING_SIZE] = {0};
@@ -19,25 +71,30 @@ QString PacketDecoder::ffmpegError(int errnum)
     return QString::fromUtf8(buf);
 }
 
-QImage PacketDecoder::decodeVideoPacket(PacketReader *reader, int packetIndex, QString *errorMsg)
+QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
 {
-    if (!reader || packetIndex < 0 || packetIndex >= reader->packetCount()) {
+    if (!m_reader || packetIndex < 0 || packetIndex >= m_reader->packetCount()) {
         if (errorMsg) *errorMsg = QStringLiteral("Invalid packet index");
         return QImage();
     }
 
-    const PacketInfo &targetPkt = reader->packetAt(packetIndex);
+    const PacketInfo &targetPkt = m_reader->packetAt(packetIndex);
     if (targetPkt.mediaType != AVMEDIA_TYPE_VIDEO) {
         if (errorMsg) *errorMsg = QStringLiteral("Not a video packet");
         return QImage();
     }
 
-    if (targetPkt.streamIndex < 0 || targetPkt.streamIndex >= reader->streams().size()) {
+    if (targetPkt.streamIndex < 0 || targetPkt.streamIndex >= m_reader->streams().size()) {
         if (errorMsg) *errorMsg = QStringLiteral("Invalid stream index");
         return QImage();
     }
 
-    const StreamInfo &streamInfo = reader->streams()[targetPkt.streamIndex];
+    if (!m_fmtCtx) {
+        if (errorMsg) *errorMsg = QStringLiteral("Decoder not opened, call open() first");
+        return QImage();
+    }
+
+    const StreamInfo &streamInfo = m_reader->streams()[targetPkt.streamIndex];
 
     // 找到解码器
     const AVCodec *codec = avcodec_find_decoder(streamInfo.codecpar->codec_id);
@@ -69,38 +126,19 @@ QImage PacketDecoder::decodeVideoPacket(PacketReader *reader, int packetIndex, Q
     }
 
     // 找到 GOP 起始关键帧
-    int gopStart = reader->findGopKeyFrame(packetIndex);
+    int gopStart = m_reader->findGopKeyFrame(packetIndex);
     if (gopStart < 0) gopStart = 0; // 找不到就从头开始
 
-    const PacketInfo &gopPkt = reader->packetAt(gopStart);
+    const PacketInfo &gopPkt = m_reader->packetAt(gopStart);
 
-    // 打开独立的 AVFormatContext 避免与 reader 共享状态
-    AVFormatContext *fmtCtx = nullptr;
-    {
-        QByteArray pathUtf8 = reader->filePath().toUtf8();
-        ret = avformat_open_input(&fmtCtx, pathUtf8.constData(), nullptr, nullptr);
-        if (ret < 0) {
-            if (errorMsg) *errorMsg = QStringLiteral("Failed to open file for decoding: %1").arg(ffmpegError(ret));
-            avcodec_free_context(&codecCtx);
-            return QImage();
-        }
-        ret = avformat_find_stream_info(fmtCtx, nullptr);
-        if (ret < 0) {
-            if (errorMsg) *errorMsg = QStringLiteral("Failed to find stream info: %1").arg(ffmpegError(ret));
-            avformat_close_input(&fmtCtx);
-            avcodec_free_context(&codecCtx);
-            return QImage();
-        }
-    }
-
-    // Seek 到关键帧位置
+    // Seek 到关键帧位置（复用 m_fmtCtx）
     int64_t seekTs = (gopPkt.dts != AV_NOPTS_VALUE) ? gopPkt.dts : gopPkt.pts;
     if (seekTs == AV_NOPTS_VALUE) seekTs = 0;
 
-    ret = av_seek_frame(fmtCtx, targetPkt.streamIndex, seekTs, AVSEEK_FLAG_BACKWARD);
+    ret = av_seek_frame(m_fmtCtx, targetPkt.streamIndex, seekTs, AVSEEK_FLAG_BACKWARD);
     if (ret < 0) {
         // 尝试 seek 到文件开头
-        av_seek_frame(fmtCtx, -1, 0, AVSEEK_FLAG_BACKWARD);
+        av_seek_frame(m_fmtCtx, -1, 0, AVSEEK_FLAG_BACKWARD);
     }
 
     avcodec_flush_buffers(codecCtx);
@@ -122,20 +160,33 @@ QImage PacketDecoder::decodeVideoPacket(PacketReader *reader, int packetIndex, Q
 
             // PTS 匹配
             if (frame->pts == targetPkt.pts) {
-                // 转换为 RGB24
-                SwsContext *swsCtx = sws_getContext(
-                    frame->width, frame->height, static_cast<AVPixelFormat>(frame->format),
-                    frame->width, frame->height, AV_PIX_FMT_RGB24,
-                    SWS_BILINEAR, nullptr, nullptr, nullptr);
+                int w = frame->width;
+                int h = frame->height;
+                AVPixelFormat srcFmt = static_cast<AVPixelFormat>(frame->format);
 
-                if (swsCtx) {
+                // 复用或重建 SwsContext
+                if (m_swsCtx && (m_swsWidth != w || m_swsHeight != h || m_swsSrcFmt != srcFmt)) {
+                    sws_freeContext(m_swsCtx);
+                    m_swsCtx = nullptr;
+                }
+                if (!m_swsCtx) {
+                    m_swsCtx = sws_getContext(
+                        w, h, srcFmt,
+                        w, h, AV_PIX_FMT_RGB24,
+                        SWS_BILINEAR, nullptr, nullptr, nullptr);
+                    m_swsWidth = w;
+                    m_swsHeight = h;
+                    m_swsSrcFmt = srcFmt;
+                }
+
+                if (m_swsCtx) {
                     AVFrame *rgbFrame = av_frame_alloc();
                     rgbFrame->format = AV_PIX_FMT_RGB24;
-                    rgbFrame->width = frame->width;
-                    rgbFrame->height = frame->height;
+                    rgbFrame->width = w;
+                    rgbFrame->height = h;
                     av_frame_get_buffer(rgbFrame, 0);
 
-                    sws_scale(swsCtx, frame->data, frame->linesize, 0, frame->height,
+                    sws_scale(m_swsCtx, frame->data, frame->linesize, 0, h,
                               rgbFrame->data, rgbFrame->linesize);
 
                     QImage img(rgbFrame->data[0], rgbFrame->width, rgbFrame->height,
@@ -143,7 +194,6 @@ QImage PacketDecoder::decodeVideoPacket(PacketReader *reader, int packetIndex, Q
                     result = img.copy(); // 深拷贝
 
                     av_frame_free(&rgbFrame);
-                    sws_freeContext(swsCtx);
                 }
 
                 found = true;
@@ -156,7 +206,7 @@ QImage PacketDecoder::decodeVideoPacket(PacketReader *reader, int packetIndex, Q
     };
 
     while (!found && maxPackets-- > 0) {
-        ret = av_read_frame(fmtCtx, pkt);
+        ret = av_read_frame(m_fmtCtx, pkt);
         if (ret < 0) break; // EOF 或错误，后续 drain 处理
 
         if (pkt->stream_index != targetPkt.streamIndex) {
@@ -193,7 +243,6 @@ QImage PacketDecoder::decodeVideoPacket(PacketReader *reader, int packetIndex, Q
     av_frame_free(&frame);
     av_packet_free(&pkt);
     avcodec_free_context(&codecCtx);
-    avformat_close_input(&fmtCtx);
 
     if (!found && errorMsg) {
         *errorMsg = QStringLiteral("Failed to decode target frame (PTS=%1)").arg(targetPkt.pts);
@@ -202,27 +251,32 @@ QImage PacketDecoder::decodeVideoPacket(PacketReader *reader, int packetIndex, Q
     return result;
 }
 
-AudioData PacketDecoder::decodeAudioPacket(PacketReader *reader, int packetIndex, QString *errorMsg)
+AudioData PacketDecoder::decodeAudioPacket(int packetIndex, QString *errorMsg)
 {
     AudioData audioData;
 
-    if (!reader || packetIndex < 0 || packetIndex >= reader->packetCount()) {
+    if (!m_reader || packetIndex < 0 || packetIndex >= m_reader->packetCount()) {
         if (errorMsg) *errorMsg = QStringLiteral("Invalid packet index");
         return audioData;
     }
 
-    const PacketInfo &targetPkt = reader->packetAt(packetIndex);
+    const PacketInfo &targetPkt = m_reader->packetAt(packetIndex);
     if (targetPkt.mediaType != AVMEDIA_TYPE_AUDIO) {
         if (errorMsg) *errorMsg = QStringLiteral("Not an audio packet");
         return audioData;
     }
 
-    if (targetPkt.streamIndex < 0 || targetPkt.streamIndex >= reader->streams().size()) {
+    if (targetPkt.streamIndex < 0 || targetPkt.streamIndex >= m_reader->streams().size()) {
         if (errorMsg) *errorMsg = QStringLiteral("Invalid stream index");
         return audioData;
     }
 
-    const StreamInfo &streamInfo = reader->streams()[targetPkt.streamIndex];
+    if (!m_fmtCtx) {
+        if (errorMsg) *errorMsg = QStringLiteral("Decoder not opened, call open() first");
+        return audioData;
+    }
+
+    const StreamInfo &streamInfo = m_reader->streams()[targetPkt.streamIndex];
 
     const AVCodec *codec = avcodec_find_decoder(streamInfo.codecpar->codec_id);
     if (!codec) {
@@ -252,35 +306,13 @@ AudioData PacketDecoder::decodeAudioPacket(PacketReader *reader, int packetIndex
         return audioData;
     }
 
-    // 打开独立的 AVFormatContext 避免与 reader 共享状态
-    AVFormatContext *fmtCtx = nullptr;
-    {
-        QByteArray pathUtf8 = reader->filePath().toUtf8();
-        ret = avformat_open_input(&fmtCtx, pathUtf8.constData(), nullptr, nullptr);
-        if (ret < 0) {
-            if (errorMsg) *errorMsg = QStringLiteral("Failed to open file for decoding: %1").arg(ffmpegError(ret));
-            avcodec_free_context(&codecCtx);
-            return audioData;
-        }
-        ret = avformat_find_stream_info(fmtCtx, nullptr);
-        if (ret < 0) {
-            if (errorMsg) *errorMsg = QStringLiteral("Failed to find stream info: %1").arg(ffmpegError(ret));
-            avformat_close_input(&fmtCtx);
-            avcodec_free_context(&codecCtx);
-            return audioData;
-        }
-    }
-
-    // Seek 到目标 Packet 前方，预留若干帧给解码器预热
-    // AAC 等编码使用 MDCT 变换，解码时需要前一帧数据做 overlap-add，
-    // 若解码器从目标帧冷启动，首帧前半部分会是静音（priming artifact）
-    // 注意：AAC encoder delay 会产生负 PTS 的 priming 帧，不能 clamp 到 0
+    // Seek 到目标 Packet 前方（复用 m_fmtCtx），预留若干帧给解码器预热
     int64_t seekTs = (targetPkt.dts != AV_NOPTS_VALUE) ? targetPkt.dts : targetPkt.pts;
     if (seekTs == AV_NOPTS_VALUE) seekTs = 0;
     int64_t warmupOffset = (targetPkt.duration > 0) ? targetPkt.duration * 3 : 10000;
     seekTs -= warmupOffset;
 
-    av_seek_frame(fmtCtx, targetPkt.streamIndex, seekTs, AVSEEK_FLAG_BACKWARD);
+    av_seek_frame(m_fmtCtx, targetPkt.streamIndex, seekTs, AVSEEK_FLAG_BACKWARD);
     avcodec_flush_buffers(codecCtx);
 
     AVPacket *pkt = av_packet_alloc();
@@ -346,7 +378,7 @@ AudioData PacketDecoder::decodeAudioPacket(PacketReader *reader, int packetIndex
     };
 
     while (!found && maxPackets-- > 0) {
-        ret = av_read_frame(fmtCtx, pkt);
+        ret = av_read_frame(m_fmtCtx, pkt);
         if (ret < 0) break;
 
         if (pkt->stream_index != targetPkt.streamIndex) {
@@ -423,7 +455,6 @@ AudioData PacketDecoder::decodeAudioPacket(PacketReader *reader, int packetIndex
     av_frame_free(&frame);
     av_packet_free(&pkt);
     avcodec_free_context(&codecCtx);
-    avformat_close_input(&fmtCtx);
 
     if (!found && errorMsg) {
         *errorMsg = QStringLiteral("Failed to decode target audio packet (PTS=%1)").arg(targetPkt.pts);
@@ -432,28 +463,28 @@ AudioData PacketDecoder::decodeAudioPacket(PacketReader *reader, int packetIndex
     return audioData;
 }
 
-QString PacketDecoder::decodeSubtitlePacket(PacketReader *reader, int packetIndex, QString *errorMsg)
+QString PacketDecoder::decodeSubtitlePacket(int packetIndex, QString *errorMsg)
 {
-    if (!reader || packetIndex < 0 || packetIndex >= reader->packetCount()) {
+    if (!m_reader || packetIndex < 0 || packetIndex >= m_reader->packetCount()) {
         if (errorMsg) *errorMsg = QStringLiteral("Invalid packet index");
         return QString();
     }
 
-    const PacketInfo &targetPkt = reader->packetAt(packetIndex);
+    const PacketInfo &targetPkt = m_reader->packetAt(packetIndex);
     if (targetPkt.mediaType != AVMEDIA_TYPE_SUBTITLE) {
         if (errorMsg) *errorMsg = QStringLiteral("Not a subtitle packet");
         return QString();
     }
 
-    if (targetPkt.streamIndex < 0 || targetPkt.streamIndex >= reader->streams().size()) {
+    if (targetPkt.streamIndex < 0 || targetPkt.streamIndex >= m_reader->streams().size()) {
         if (errorMsg) *errorMsg = QStringLiteral("Invalid stream index");
         return QString();
     }
 
-    const StreamInfo &streamInfo = reader->streams()[targetPkt.streamIndex];
+    const StreamInfo &streamInfo = m_reader->streams()[targetPkt.streamIndex];
 
-    // 读取原始数据
-    QByteArray rawData = reader->readPacketData(packetIndex);
+    // 读取原始数据（通过 PacketReader 的共享 formatCtx，在主线程调用）
+    QByteArray rawData = m_reader->readPacketData(packetIndex);
     if (rawData.isEmpty()) {
         if (errorMsg) *errorMsg = QStringLiteral("Failed to read packet data");
         return QString();
