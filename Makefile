@@ -1,20 +1,29 @@
 # ============================================
 # VideoAnalyser 项目构建 Makefile (跨平台)
 # ============================================
+# 用法：
+#   1. 复制 config.mk.example 为 config.mk
+#   2. 在 config.mk 中设置你本地的路径
+#   3. make debug / make release / make run
+# ============================================
+
+# ---- 加载用户本地配置 ----
+-include config.mk
 
 # ---- 平台检测 ----
 ifeq ($(OS),Windows_NT)
     PLATFORM     = windows
     EXE_SUFFIX   = .exe
-    # Windows: Qt 和工具链路径
-    QT_DIR       = E:/Qt/6.8.3/mingw_64
-    MINGW_DIR    = E:/Qt/Tools/mingw1310_64
-    CMAKE        = E:/Qt/Tools/CMake_64/bin/cmake.exe
-    CXX          = $(MINGW_DIR)/bin/g++.exe
-    CC           = $(MINGW_DIR)/bin/gcc.exe
-    # vcpkg
-    VCPKG_ROOT    = C:/vcpkgCache/vcpkg
-    VCPKG_TRIPLET = x64-mingw-dynamic
+
+    # Windows 默认路径（可在 config.mk 中覆盖）
+    QT_DIR       ?= C:/Qt/6.8.3/mingw_64
+    MINGW_DIR    ?= C:/Qt/Tools/mingw1310_64
+    CMAKE        ?= cmake
+    CXX          ?= $(MINGW_DIR)/bin/g++.exe
+    CC           ?= $(MINGW_DIR)/bin/gcc.exe
+    VCPKG_ROOT   ?= C:/vcpkg
+    VCPKG_TRIPLET ?= x64-mingw-dynamic
+
     # 平台特定 CMake 参数
     PLATFORM_CMAKE_ARGS = \
         -DCMAKE_PREFIX_PATH=$(QT_DIR) \
@@ -28,10 +37,10 @@ ifeq ($(OS),Windows_NT)
 else
     PLATFORM     = linux
     EXE_SUFFIX   =
-    CMAKE        = cmake
-    # vcpkg (可选，Linux 也可用系统包管理器安装依赖)
+    CMAKE        ?= cmake
     VCPKG_ROOT   ?= $(HOME)/vcpkg
-    VCPKG_TRIPLET = x64-linux
+    VCPKG_TRIPLET ?= x64-linux
+
     # 检查是否存在 vcpkg
     ifneq ($(wildcard $(VCPKG_ROOT)/scripts/buildsystems/vcpkg.cmake),)
         PLATFORM_CMAKE_ARGS = \

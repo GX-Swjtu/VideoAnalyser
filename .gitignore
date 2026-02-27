@@ -85,3 +85,15 @@ CMakeLists.txt.user*
 
 # Qt Creator user files
 CMakeLists.txt.user*
+
+# 本地构建配置（用户自定义路径）
+config.mk
+
+# CMake 用户预设（本地路径配置）
+CMakeUserPresets.json
+
+# 构建日志
+build_output.txt
+
+# Testing 临时文件
+Testing/
