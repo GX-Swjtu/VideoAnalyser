@@ -113,22 +113,9 @@ QImage PacketDecoder::decodeVideoPacket(PacketReader *reader, int packetIndex, Q
     bool found = false;
     int maxPackets = 5000; // 防止无限循环
 
-    while (!found && maxPackets-- > 0) {
-        ret = av_read_frame(fmtCtx, pkt);
-        if (ret < 0) break;
-
-        if (pkt->stream_index != targetPkt.streamIndex) {
-            av_packet_unref(pkt);
-            continue;
-        }
-
-        ret = avcodec_send_packet(codecCtx, pkt);
-        if (ret < 0 && ret != AVERROR(EAGAIN)) {
-            av_packet_unref(pkt);
-            continue;
-        }
-
-        while (true) {
+    // 辅助 lambda：从解码器接收帧并匹配目标 PTS
+    auto drainFrames = [&]() {
+        while (!found) {
             ret = avcodec_receive_frame(codecCtx, frame);
             if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
             if (ret < 0) break;
@@ -166,6 +153,24 @@ QImage PacketDecoder::decodeVideoPacket(PacketReader *reader, int packetIndex, Q
 
             av_frame_unref(frame);
         }
+    };
+
+    while (!found && maxPackets-- > 0) {
+        ret = av_read_frame(fmtCtx, pkt);
+        if (ret < 0) break; // EOF 或错误，后续 drain 处理
+
+        if (pkt->stream_index != targetPkt.streamIndex) {
+            av_packet_unref(pkt);
+            continue;
+        }
+
+        ret = avcodec_send_packet(codecCtx, pkt);
+        if (ret < 0 && ret != AVERROR(EAGAIN)) {
+            av_packet_unref(pkt);
+            continue;
+        }
+
+        drainFrames();
 
         // 超过目标 DTS 则停止（使用帧 duration 的 50 倍作为余量）
         if (!found && targetPkt.dts != AV_NOPTS_VALUE && pkt->dts != AV_NOPTS_VALUE) {
@@ -177,6 +182,12 @@ QImage PacketDecoder::decodeVideoPacket(PacketReader *reader, int packetIndex, Q
         }
 
         av_packet_unref(pkt);
+    }
+
+    // EOF 后 drain 解码器：发送 NULL packet 刷出缓冲区中剩余的帧
+    if (!found) {
+        avcodec_send_packet(codecCtx, nullptr);
+        drainFrames();
     }
 
     av_frame_free(&frame);
