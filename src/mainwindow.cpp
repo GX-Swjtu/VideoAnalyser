@@ -18,6 +18,10 @@
 #include <QMessageBox>
 #include <QApplication>
 #include <QTime>
+#include <QMimeData>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QFileInfo>
 
 extern "C" {
 #include <libavutil/avutil.h>
@@ -33,6 +37,8 @@ MainWindow::MainWindow(QWidget *parent)
 
     setupUI();
     setupMenuAndToolbar();
+
+    setAcceptDrops(true);
 
     setWindowTitle(QStringLiteral("VideoAnalyser"));
     resize(1200, 800);
@@ -111,6 +117,30 @@ void MainWindow::setupMenuAndToolbar()
     toolbar->addWidget(m_filterCombo);
 }
 
+void MainWindow::dragEnterEvent(QDragEnterEvent *event)
+{
+    if (event->mimeData()->hasUrls()) {
+        const auto urls = event->mimeData()->urls();
+        for (const QUrl &url : urls) {
+            if (url.isLocalFile()) {
+                event->acceptProposedAction();
+                return;
+            }
+        }
+    }
+}
+
+void MainWindow::dropEvent(QDropEvent *event)
+{
+    const auto urls = event->mimeData()->urls();
+    for (const QUrl &url : urls) {
+        if (url.isLocalFile()) {
+            loadFile(url.toLocalFile());
+            return; // 只处理第一个文件
+        }
+    }
+}
+
 void MainWindow::openFile()
 {
     QString filePath = QFileDialog::getOpenFileName(
@@ -122,6 +152,11 @@ void MainWindow::openFile()
 
     if (filePath.isEmpty()) return;
 
+    loadFile(filePath);
+}
+
+void MainWindow::loadFile(const QString &filePath)
+{
     // 关闭之前的
     closeAllDetailTabs();
     m_model->clear();

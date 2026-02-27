@@ -2,6 +2,8 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 
 class PacketReader;
 class PacketListModel;
@@ -20,6 +22,10 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
+protected:
+    void dragEnterEvent(QDragEnterEvent *event) override;
+    void dropEvent(QDropEvent *event) override;
+
 private slots:
     void openFile();
     void onPacketDoubleClicked(const QModelIndex &index);
@@ -29,6 +35,7 @@ private slots:
 private:
     void setupUI();
     void setupMenuAndToolbar();
+    void loadFile(const QString &filePath);
     void updateStatusBar();
     void closeAllDetailTabs();
 
