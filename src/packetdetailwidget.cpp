@@ -4,6 +4,7 @@
 #include "packetdecoder.h"
 #include "hexviewwidget.h"
 #include "audiowaveformwidget.h"
+#include "audiospectrogramwidget.h"
 
 #include <QVBoxLayout>
 #include <QSplitter>
@@ -174,15 +175,22 @@ void PacketDetailWidget::buildContentTabs(PacketReader *reader, int packetIndex)
         m_contentTabs->addTab(imageLabel, QStringLiteral("视频帧"));
     }
 
-    // 音频波形（优先显示）
+    // 音频频谱 + 波形（优先显示）
     if (pkt.mediaType == AVMEDIA_TYPE_AUDIO) {
-        auto *waveform = new AudioWaveformWidget();
-
         QApplication::setOverrideCursor(Qt::WaitCursor);
         QString errMsg;
         AudioData audioData = PacketDecoder::decodeAudioPacket(reader, packetIndex, &errMsg);
         QApplication::restoreOverrideCursor();
 
+        // 频谱图（第一标签页）
+        auto *spectrogram = new AudioSpectrogramWidget();
+        if (!audioData.samples.isEmpty()) {
+            spectrogram->setAudioData(audioData);
+        }
+        m_contentTabs->addTab(spectrogram, QStringLiteral("频谱"));
+
+        // 波形图（第二标签页）
+        auto *waveform = new AudioWaveformWidget();
         if (!audioData.samples.isEmpty()) {
             waveform->setAudioData(audioData);
         }

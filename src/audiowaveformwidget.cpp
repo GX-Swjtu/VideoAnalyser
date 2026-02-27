@@ -4,6 +4,7 @@
 #include <QPainterPath>
 #include <QPaintEvent>
 #include <algorithm>
+#include <cmath>
 
 AudioWaveformWidget::AudioWaveformWidget(QWidget *parent)
     : QWidget(parent)
@@ -110,20 +111,47 @@ void AudioWaveformWidget::paintEvent(QPaintEvent *event)
                 channelSamples.append(m_data.samples[idx]);
         }
 
+        // 自适应幅度：找到该声道的峰值，放大波形以填满显示区域
+        float peakAbs = 0.0f;
+        for (float s : channelSamples) {
+            float a = std::fabs(s);
+            if (a > peakAbs) peakAbs = a;
+        }
+        // 归一化系数：将峰值放大到 ~90% 显示区域，最小增益 1.0（不缩小）
+        float gain = 1.0f;
+        if (peakAbs > 1e-6f) {
+            gain = 0.9f / peakAbs;
+            if (gain < 1.0f) gain = 1.0f; // 如果信号已经接近满幅，不缩小
+        }
+
         // 降采样
         auto pairs = downsample(channelSamples.constData(), channelSamples.size(), w);
 
-        // 使用 QPainterPath 绘制波形
+        // 绘制波形
         QColor color = channelColors[ch % 4];
         painter.setPen(QPen(color, 1));
 
         if (pairs.size() <= w) {
-            // 绘制 min/max 柱状
+            // 绘制 min/max 柱状（应用增益）
             for (int x = 0; x < pairs.size(); ++x) {
-                float yMin = centerY - pairs[x].maxVal * halfH;
-                float yMax = centerY - pairs[x].minVal * halfH;
+                float yMin = centerY - pairs[x].maxVal * gain * halfH;
+                float yMax = centerY - pairs[x].minVal * gain * halfH;
                 painter.drawLine(QPointF(x, yMin), QPointF(x, yMax));
             }
+        }
+
+        // 右下角标注增益（当放大超过 1.5x 时提示用户）
+        if (gain > 1.5f) {
+            painter.setPen(QColor(120, 120, 120));
+            QFont smallFont = painter.font();
+            smallFont.setPointSize(7);
+            painter.setFont(smallFont);
+            QString gainStr = QStringLiteral("×%1 (峰值: %2dB)")
+                                  .arg(gain, 0, 'f', 1)
+                                  .arg(peakAbs > 1e-10f ? 20.0f * std::log10(peakAbs) : -100.0f, 0, 'f', 1);
+            QFontMetrics gfm(smallFont);
+            painter.drawText(w - gfm.horizontalAdvance(gainStr) - 6,
+                             yBase + channelHeight - 4, gainStr);
         }
     }
 }

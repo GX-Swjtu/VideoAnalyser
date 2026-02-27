@@ -138,6 +138,44 @@ TEST_F(PacketDecoderTest, DecodeAudioFormat) {
     }
 }
 
+TEST_F(PacketDecoderTest, DecodeAudioPacketNonSilent) {
+    QString path = testFile("test_h264_aac.mp4");
+    if (!QFile::exists(path)) {
+        GTEST_SKIP() << "Test file not found";
+    }
+
+    ASSERT_TRUE(reader->open(path));
+    ASSERT_TRUE(reader->readAllPackets());
+
+    // 找一个非首个的音频包（避免 priming 帧问题）
+    int audioCount = 0;
+    int idx = -1;
+    for (int i = 0; i < reader->packetCount(); ++i) {
+        if (reader->packetAt(i).mediaType == AVMEDIA_TYPE_AUDIO) {
+            audioCount++;
+            if (audioCount >= 3) { // 第 3 个音频包
+                idx = i;
+                break;
+            }
+        }
+    }
+    if (idx < 0) {
+        GTEST_SKIP() << "Not enough audio packets";
+    }
+
+    QString err;
+    AudioData data = PacketDecoder::decodeAudioPacket(reader, idx, &err);
+    ASSERT_FALSE(data.samples.isEmpty()) << "Error: " << err.toStdString();
+
+    // 验证不全是静音（最大振幅 > 0.001）
+    float maxAbs = 0.0f;
+    for (float s : data.samples) {
+        float a = std::fabs(s);
+        if (a > maxAbs) maxAbs = a;
+    }
+    EXPECT_GT(maxAbs, 0.001f) << "Audio samples appear to be all silent (max abs value: " << maxAbs << ")";
+}
+
 TEST_F(PacketDecoderTest, InvalidPacketIndex) {
     QString path = testFile("test_h264_aac.mp4");
     if (!QFile::exists(path)) {

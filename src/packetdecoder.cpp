@@ -282,7 +282,7 @@ AudioData PacketDecoder::decodeAudioPacket(PacketReader *reader, int packetIndex
             continue;
         }
 
-        // 标记是否已发送目标 Packet（按 pos 或 pts 匹配）
+        // 追踪是否已发送目标 Packet（按 pos 或 pts 匹配）
         if (!sentTarget) {
             if (targetPkt.pos >= 0) {
                 sentTarget = (pkt->pos == targetPkt.pos && pkt->size == targetPkt.size);
@@ -302,25 +302,44 @@ AudioData PacketDecoder::decodeAudioPacket(PacketReader *reader, int packetIndex
             if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
             if (ret < 0) break;
 
-            // 在目标 Packet 已发送后，接受第一个解码帧
-            // （处理 AAC priming 延迟：编码器输出的 priming 帧 PTS 为负值，
-            //   解码器会吸收该帧而不产生输出，实际帧从 PTS=0 开始）
-            if (sentTarget) {
+            // 帧匹配策略：
+            // 1. PTS 精确匹配（主要方式，与视频解码一致）
+            // 2. 回退：如果目标包已发送且 PTS 匹配失败（AAC priming 帧 PTS 被解码器调整），
+            //    接受目标包发送后的第一个解码帧
+            bool ptsMatch = (frame->pts == targetPkt.pts);
+            bool fallbackMatch = (sentTarget && !ptsMatch && frame->pts >= 0);
+
+            if (ptsMatch || fallbackMatch) {
                 int nbSamples = frame->nb_samples;
                 int channels = frame->ch_layout.nb_channels;
 
                 audioData.sampleRate = frame->sample_rate;
                 audioData.channels = channels;
 
-                // 使用 libswresample 转换为 float 交错格式
-                if (frame->format != AV_SAMPLE_FMT_FLT || av_sample_fmt_is_planar(static_cast<AVSampleFormat>(frame->format))) {
+                AVSampleFormat fmt = static_cast<AVSampleFormat>(frame->format);
+
+                if (fmt == AV_SAMPLE_FMT_FLTP) {
+                    // 最常见情况：AAC 输出 planar float，直接交错拷贝
+                    audioData.samples.resize(nbSamples * channels);
+                    for (int ch = 0; ch < channels; ++ch) {
+                        const float *src = reinterpret_cast<const float*>(frame->extended_data[ch]);
+                        for (int i = 0; i < nbSamples; ++i) {
+                            audioData.samples[i * channels + ch] = src[i];
+                        }
+                    }
+                } else if (fmt == AV_SAMPLE_FMT_FLT && !av_sample_fmt_is_planar(fmt)) {
+                    // 已经是 float interleaved
+                    audioData.samples.resize(nbSamples * channels);
+                    memcpy(audioData.samples.data(), frame->data[0], nbSamples * channels * sizeof(float));
+                } else {
+                    // 其他格式：使用 libswresample 转换为 float 交错格式
                     SwrContext *swr = nullptr;
                     AVChannelLayout outLayout;
                     av_channel_layout_copy(&outLayout, &frame->ch_layout);
 
                     ret = swr_alloc_set_opts2(&swr,
                                               &outLayout, AV_SAMPLE_FMT_FLT, frame->sample_rate,
-                                              &frame->ch_layout, static_cast<AVSampleFormat>(frame->format), frame->sample_rate,
+                                              &frame->ch_layout, fmt, frame->sample_rate,
                                               0, nullptr);
                     av_channel_layout_uninit(&outLayout);
 
@@ -329,18 +348,24 @@ AudioData PacketDecoder::decodeAudioPacket(PacketReader *reader, int packetIndex
                         if (ret >= 0) {
                             audioData.samples.resize(nbSamples * channels);
                             uint8_t *outBuf = reinterpret_cast<uint8_t*>(audioData.samples.data());
-                            swr_convert(swr, &outBuf, nbSamples,
+                            int converted = swr_convert(swr, &outBuf, nbSamples,
                                         const_cast<const uint8_t**>(frame->extended_data), nbSamples);
+                            if (converted <= 0) {
+                                qWarning() << "swr_convert failed or produced 0 samples:" << converted;
+                                audioData.samples.clear();
+                            }
+                        } else {
+                            qWarning() << "swr_init failed:" << ffmpegError(ret);
                         }
                         swr_free(&swr);
+                    } else {
+                        qWarning() << "swr_alloc_set_opts2 failed";
                     }
-                } else {
-                    // 已经是 float interleaved
-                    audioData.samples.resize(nbSamples * channels);
-                    memcpy(audioData.samples.data(), frame->data[0], nbSamples * channels * sizeof(float));
                 }
 
-                found = true;
+                if (!audioData.samples.isEmpty()) {
+                    found = true;
+                }
                 av_frame_unref(frame);
                 break;
             }
@@ -366,7 +391,7 @@ AudioData PacketDecoder::decodeAudioPacket(PacketReader *reader, int packetIndex
     avformat_close_input(&fmtCtx);
 
     if (!found && errorMsg) {
-        *errorMsg = QStringLiteral("Failed to decode target audio packet");
+        *errorMsg = QStringLiteral("Failed to decode target audio packet (PTS=%1)").arg(targetPkt.pts);
     }
 
     return audioData;
