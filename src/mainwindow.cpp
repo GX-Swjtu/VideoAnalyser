@@ -175,6 +175,12 @@ void MainWindow::openFile()
 
 void MainWindow::loadFile(const QString &filePath)
 {
+    // 关闭旧文件遗留的详情窗口，避免后台解码线程继续访问已重置的 reader 数据
+    const auto detailWidgets = findChildren<PacketDetailWidget*>();
+    for (PacketDetailWidget *widget : detailWidgets) {
+        widget->close();
+    }
+
     // 清空之前的分析数据
     clearAllAnalysis();
     m_model->clear();
@@ -192,7 +198,10 @@ void MainWindow::loadFile(const QString &filePath)
     progress.setWindowModality(Qt::WindowModal);
     progress.setMinimumDuration(500);
 
-    connect(m_reader, &PacketReader::progressChanged, &progress, [&progress](int current, int total) {
+    if (m_progressConnection) {
+        disconnect(m_progressConnection);
+    }
+    m_progressConnection = connect(m_reader, &PacketReader::progressChanged, &progress, [&progress](int current, int total) {
         if (total > 0) {
             progress.setMaximum(total);
             progress.setValue(current);

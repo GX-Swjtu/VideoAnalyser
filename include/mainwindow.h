@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QMetaObject>
 
 class PacketReader;
 class PacketListModel;
@@ -51,6 +52,7 @@ private:
     QTableView *m_tableView = nullptr;
     QComboBox *m_filterCombo = nullptr;
     QLabel *m_statusLabel = nullptr;
+    QMetaObject::Connection m_progressConnection;
 
     // 分析标签页
     MediaInfoWidget *m_mediaInfoWidget = nullptr;

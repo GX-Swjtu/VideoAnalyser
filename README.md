@@ -20,6 +20,16 @@
 - **拖放打开** — 支持拖放文件到窗口直接打开
 - **内存友好** — 只存元数据，原始数据和解码均按需从文件读取
 
+## 项目体检（2026-02-28）
+
+- **测试与构建状态**：当前 `CMake: build` 和 `ctest` 通过（`VideoAnalyserTests`）。
+- **逻辑问题（已修复）**：
+   - 重新打开文件时，旧的 `PacketDetailWidget` 可能仍在后台解码并访问已重置的 `PacketReader`，存在并发/生命周期风险；现已在加载新文件前主动关闭旧详情窗口。
+   - `loadFile()` 每次调用都会新增一次 `progressChanged` 连接，可能导致重复更新；现改为复用单连接并在重连前断开旧连接。
+   - `PacketReader::open()` 中 `codecpar` 分配/拷贝未做失败处理；现已补齐错误路径并确保失败时释放资源。
+- **资源泄漏检查结论**：核心 FFmpeg 对象（`AVPacket`/`AVFrame`/`AVCodecContext`/`SwsContext`/`SwrContext`）在主路径和错误路径均有对应释放，未发现确定性的内存/句柄泄漏。
+- **当前已知限制**：尚未接入 AddressSanitizer/LeakSanitizer 等运行时泄漏检测，建议在 CI 增加一组带 Sanitizer 的构建配置用于长期回归。
+
 ## 环境要求
 
 | 依赖 | 最低版本 | 说明 |

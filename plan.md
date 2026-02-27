@@ -1,5 +1,41 @@
 # VideoAnalyser — Qt+FFmpeg 通用视频 Packet 分析器
 
+## 2026-02-28 项目体检结论（增量）
+
+### 本次检查范围
+
+- 实现逻辑正确性（重点：`PacketReader`、`PacketDecoder`、`MainWindow`、`PacketDetailWidget` 生命周期）
+- 资源管理（内存泄漏、FFmpeg 资源释放、句柄/文件描述符泄漏风险）
+- 文档一致性（README 与实际实现、运行方式和风险说明）
+
+### 发现与处理
+
+1. **重新加载文件时的并发生命周期风险（已修复）**
+    - 问题：旧详情窗口中的后台解码任务仍可能访问已重置 `PacketReader` 数据。
+    - 处理：`MainWindow::loadFile()` 前先关闭现存 `PacketDetailWidget`。
+
+2. **进度信号重复连接（已修复）**
+    - 问题：每次 `loadFile()` 新增一条 `progressChanged` 连接，可能重复更新 UI。
+    - 处理：引入 `QMetaObject::Connection` 保存连接并在重连前显式断开。
+
+3. **`codecpar` 错误路径不完整（已修复）**
+    - 问题：`avcodec_parameters_alloc/copy` 失败时未完整处理，存在崩溃和资源残留风险。
+    - 处理：补齐返回值校验；失败时释放当前资源并 `close()` 回滚状态。
+
+### 泄漏/资源风险评估
+
+- 通过代码审查未发现确定性内存泄漏或句柄泄漏：
+  - `PacketReader`：`AVFormatContext`、`AVPacket`、`AVCodecParameters` 释放路径完整。
+  - `PacketDecoder`：`AVCodecContext`、`AVFrame`、`AVPacket`、`SwsContext`、`SwrContext` 释放路径完整。
+  - Qt 对象：大部分通过 parent 机制托管，详情页异步 watcher 在析构时回收。
+- 风险级别：**中低**（主要剩余风险来自缺少 Sanitizer 自动化验证）。
+
+### 下一步建议（按优先级）
+
+1. 在 CI 增加 Sanitizer 构建（ASan/UBSan，Linux 优先）用于内存与未定义行为回归检测。
+2. 为 `MainWindow::loadFile()` 增加回归测试（多次加载文件 + 详情窗口存活场景）。
+3. 增加 `PacketReader::open()` 失败路径测试（mock/异常输入）覆盖新错误分支。
+
 ## 项目目标
 
 基于 Qt 6 + FFmpeg 构建一个通用视频数据分析工具。核心功能：打开任意格式视频文件 → 使用 FFmpeg 遍历所有 AVPacket → 在表格中展示 Packet 列表 → 双击某个 Packet 在新标签页中查看详情（元数据、Hex 原始数据、解码内容）。

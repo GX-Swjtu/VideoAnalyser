@@ -60,7 +60,18 @@ bool PacketReader::open(const QString &filePath)
 
         // 深拷贝 codecpar
         si.codecpar = avcodec_parameters_alloc();
-        avcodec_parameters_copy(si.codecpar, s->codecpar);
+        if (!si.codecpar) {
+            qWarning() << "Failed to allocate codec parameters";
+            close();
+            return false;
+        }
+        ret = avcodec_parameters_copy(si.codecpar, s->codecpar);
+        if (ret < 0) {
+            qWarning() << "Failed to copy codec parameters:" << ffmpegError(ret);
+            avcodec_parameters_free(&si.codecpar);
+            close();
+            return false;
+        }
 
         // 音频特有
         si.sampleRate = s->codecpar->sample_rate;
@@ -150,8 +161,8 @@ bool PacketReader::readAllPackets()
 
         // 发射进度（每 1000 个 Packet）
         if (index % 1000 == 0) {
-            if (totalSize > 0) {
-                emit progressChanged(static_cast<int>(pkt->pos * 100 / totalSize), 100);
+            if (totalSize > 0 && info.pos >= 0) {
+                emit progressChanged(static_cast<int>(info.pos * 100 / totalSize), 100);
             } else {
                 emit progressChanged(index, 0);
             }
