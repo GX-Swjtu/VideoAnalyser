@@ -37,7 +37,6 @@ target_link_directories(VideoAnalyserTests PRIVATE ${FFMPEG_LIBRARY_DIRS})
 target_link_libraries(VideoAnalyserTests PRIVATE
     VideoAnalyserLib
     GTest::gtest
-    GTest::gtest_main
 )
 set_target_properties(VideoAnalyserTests PROPERTIES AUTOMOC ON)
 

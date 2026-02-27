@@ -59,6 +59,8 @@ QImage PacketDecoder::decodeVideoPacket(PacketReader *reader, int packetIndex, Q
         return QImage();
     }
 
+    codecCtx->pkt_timebase = streamInfo.timeBase;
+
     ret = avcodec_open2(codecCtx, codec, nullptr);
     if (ret < 0) {
         if (errorMsg) *errorMsg = QStringLiteral("Failed to open decoder: %1").arg(ffmpegError(ret));
@@ -72,8 +74,26 @@ QImage PacketDecoder::decodeVideoPacket(PacketReader *reader, int packetIndex, Q
 
     const PacketInfo &gopPkt = reader->packetAt(gopStart);
 
+    // 打开独立的 AVFormatContext 避免与 reader 共享状态
+    AVFormatContext *fmtCtx = nullptr;
+    {
+        QByteArray pathUtf8 = reader->filePath().toUtf8();
+        ret = avformat_open_input(&fmtCtx, pathUtf8.constData(), nullptr, nullptr);
+        if (ret < 0) {
+            if (errorMsg) *errorMsg = QStringLiteral("Failed to open file for decoding: %1").arg(ffmpegError(ret));
+            avcodec_free_context(&codecCtx);
+            return QImage();
+        }
+        ret = avformat_find_stream_info(fmtCtx, nullptr);
+        if (ret < 0) {
+            if (errorMsg) *errorMsg = QStringLiteral("Failed to find stream info: %1").arg(ffmpegError(ret));
+            avformat_close_input(&fmtCtx);
+            avcodec_free_context(&codecCtx);
+            return QImage();
+        }
+    }
+
     // Seek 到关键帧位置
-    AVFormatContext *fmtCtx = reader->formatContext();
     int64_t seekTs = (gopPkt.dts != AV_NOPTS_VALUE) ? gopPkt.dts : gopPkt.pts;
     if (seekTs == AV_NOPTS_VALUE) seekTs = 0;
 
@@ -147,9 +167,10 @@ QImage PacketDecoder::decodeVideoPacket(PacketReader *reader, int packetIndex, Q
             av_frame_unref(frame);
         }
 
-        // 超过目标 DTS 则停止
+        // 超过目标 DTS 则停止（使用帧 duration 的 50 倍作为余量）
         if (!found && targetPkt.dts != AV_NOPTS_VALUE && pkt->dts != AV_NOPTS_VALUE) {
-            if (pkt->dts > targetPkt.dts + 100) {
+            int64_t margin = (targetPkt.duration > 0) ? targetPkt.duration * 50 : 100000;
+            if (pkt->dts > targetPkt.dts + margin) {
                 av_packet_unref(pkt);
                 break;
             }
@@ -161,6 +182,7 @@ QImage PacketDecoder::decodeVideoPacket(PacketReader *reader, int packetIndex, Q
     av_frame_free(&frame);
     av_packet_free(&pkt);
     avcodec_free_context(&codecCtx);
+    avformat_close_input(&fmtCtx);
 
     if (!found && errorMsg) {
         *errorMsg = QStringLiteral("Failed to decode target frame (PTS=%1)").arg(targetPkt.pts);
@@ -210,6 +232,8 @@ AudioData PacketDecoder::decodeAudioPacket(PacketReader *reader, int packetIndex
         return audioData;
     }
 
+    codecCtx->pkt_timebase = streamInfo.timeBase;
+
     ret = avcodec_open2(codecCtx, codec, nullptr);
     if (ret < 0) {
         avcodec_free_context(&codecCtx);
@@ -217,8 +241,26 @@ AudioData PacketDecoder::decodeAudioPacket(PacketReader *reader, int packetIndex
         return audioData;
     }
 
+    // 打开独立的 AVFormatContext 避免与 reader 共享状态
+    AVFormatContext *fmtCtx = nullptr;
+    {
+        QByteArray pathUtf8 = reader->filePath().toUtf8();
+        ret = avformat_open_input(&fmtCtx, pathUtf8.constData(), nullptr, nullptr);
+        if (ret < 0) {
+            if (errorMsg) *errorMsg = QStringLiteral("Failed to open file for decoding: %1").arg(ffmpegError(ret));
+            avcodec_free_context(&codecCtx);
+            return audioData;
+        }
+        ret = avformat_find_stream_info(fmtCtx, nullptr);
+        if (ret < 0) {
+            if (errorMsg) *errorMsg = QStringLiteral("Failed to find stream info: %1").arg(ffmpegError(ret));
+            avformat_close_input(&fmtCtx);
+            avcodec_free_context(&codecCtx);
+            return audioData;
+        }
+    }
+
     // Seek 到目标 Packet 附近
-    AVFormatContext *fmtCtx = reader->formatContext();
     int64_t seekTs = (targetPkt.dts != AV_NOPTS_VALUE) ? targetPkt.dts : targetPkt.pts;
     if (seekTs == AV_NOPTS_VALUE) seekTs = 0;
 
@@ -228,6 +270,7 @@ AudioData PacketDecoder::decodeAudioPacket(PacketReader *reader, int packetIndex
     AVPacket *pkt = av_packet_alloc();
     AVFrame *frame = av_frame_alloc();
     bool found = false;
+    bool sentTarget = false;
     int maxPackets = 5000;
 
     while (!found && maxPackets-- > 0) {
@@ -239,12 +282,13 @@ AudioData PacketDecoder::decodeAudioPacket(PacketReader *reader, int packetIndex
             continue;
         }
 
-        // 匹配目标 Packet
-        bool isTarget = false;
-        if (targetPkt.pos >= 0) {
-            isTarget = (pkt->pos == targetPkt.pos && pkt->size == targetPkt.size);
-        } else {
-            isTarget = (pkt->pts == targetPkt.pts && pkt->dts == targetPkt.dts && pkt->size == targetPkt.size);
+        // 标记是否已发送目标 Packet（按 pos 或 pts 匹配）
+        if (!sentTarget) {
+            if (targetPkt.pos >= 0) {
+                sentTarget = (pkt->pos == targetPkt.pos && pkt->size == targetPkt.size);
+            } else {
+                sentTarget = (pkt->pts == targetPkt.pts);
+            }
         }
 
         ret = avcodec_send_packet(codecCtx, pkt);
@@ -258,7 +302,10 @@ AudioData PacketDecoder::decodeAudioPacket(PacketReader *reader, int packetIndex
             if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
             if (ret < 0) break;
 
-            if (isTarget) {
+            // 在目标 Packet 已发送后，接受第一个解码帧
+            // （处理 AAC priming 延迟：编码器输出的 priming 帧 PTS 为负值，
+            //   解码器会吸收该帧而不产生输出，实际帧从 PTS=0 开始）
+            if (sentTarget) {
                 int nbSamples = frame->nb_samples;
                 int channels = frame->ch_layout.nb_channels;
 
@@ -301,12 +348,22 @@ AudioData PacketDecoder::decodeAudioPacket(PacketReader *reader, int packetIndex
             av_frame_unref(frame);
         }
 
+        // 超过目标 DTS 则停止
+        if (!found && targetPkt.dts != AV_NOPTS_VALUE && pkt->dts != AV_NOPTS_VALUE) {
+            int64_t margin = (targetPkt.duration > 0) ? targetPkt.duration * 50 : 100000;
+            if (pkt->dts > targetPkt.dts + margin) {
+                av_packet_unref(pkt);
+                break;
+            }
+        }
+
         av_packet_unref(pkt);
     }
 
     av_frame_free(&frame);
     av_packet_free(&pkt);
     avcodec_free_context(&codecCtx);
+    avformat_close_input(&fmtCtx);
 
     if (!found && errorMsg) {
         *errorMsg = QStringLiteral("Failed to decode target audio packet");

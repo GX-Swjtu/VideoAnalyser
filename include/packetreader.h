@@ -75,6 +75,7 @@ public:
     // 关键帧索引查询
     int findGopKeyFrame(int packetIndex) const;
 
+    QString filePath() const { return m_filePath; }
     bool isOpen() const { return m_formatCtx != nullptr; }
 
 signals:
