@@ -73,17 +73,63 @@ void AudioWaveformWidget::paintEvent(QPaintEvent *event)
     int h = height();
     int channelHeight = h / channels;
 
-    // 信息标注
-    painter.setPen(QColor(180, 180, 180));
+    // 信息栏（与频谱图风格统一）
     double duration = (samplesPerChannel > 0 && m_data.sampleRate > 0)
                           ? static_cast<double>(samplesPerChannel) / m_data.sampleRate
                           : 0.0;
-    QString info = QStringLiteral("采样率: %1Hz | 声道: %2 | 采样数: %3 | 时长: %4s")
-                       .arg(m_data.sampleRate)
-                       .arg(channels)
-                       .arg(samplesPerChannel)
-                       .arg(duration, 0, 'f', 3);
-    painter.drawText(8, 14, info);
+
+    // 计算峰值 / RMS
+    float peakDb = -100.0f;
+    float rmsDb = -100.0f;
+    {
+        float peakAbs = 0.0f;
+        double sumSq = 0.0;
+        for (float s : m_data.samples) {
+            float a = std::fabs(s);
+            if (a > peakAbs) peakAbs = a;
+            sumSq += static_cast<double>(s) * s;
+        }
+        if (peakAbs > 1e-10f)
+            peakDb = 20.0f * std::log10(peakAbs);
+        double rmsVal = std::sqrt(sumSq / m_data.samples.size());
+        if (rmsVal > 1e-10)
+            rmsDb = 20.0f * static_cast<float>(std::log10(rmsVal));
+    }
+
+    static constexpr float SILENCE_THRESHOLD_DB = -50.0f;
+    bool isSilent = rmsDb < SILENCE_THRESHOLD_DB;
+    QString silenceStr = isSilent ? QStringLiteral("静音") : QStringLiteral("有声音");
+    QColor silenceColor = isSilent ? QColor(255, 80, 80) : QColor(80, 255, 80);
+
+    painter.setPen(QColor(200, 200, 200));
+    QFont infoFont = painter.font();
+    infoFont.setPointSize(9);
+    painter.setFont(infoFont);
+
+    QString info = QStringLiteral("峰值: %1dB | RMS: %2dB | ")
+                       .arg(peakDb, 0, 'f', 1)
+                       .arg(rmsDb, 0, 'f', 1);
+    QString info2 = QStringLiteral(" | %1Hz | %2ch | %3s")
+                        .arg(m_data.sampleRate)
+                        .arg(channels)
+                        .arg(duration, 0, 'f', 3);
+
+    int textX = 8;
+    QFontMetrics fm(painter.font());
+    painter.drawText(textX, 14, info);
+    textX += fm.horizontalAdvance(info);
+
+    painter.setPen(silenceColor);
+    QFont boldFont = painter.font();
+    boldFont.setBold(true);
+    painter.setFont(boldFont);
+    painter.drawText(textX, 14, silenceStr);
+    textX += fm.horizontalAdvance(silenceStr);
+
+    boldFont.setBold(false);
+    painter.setFont(boldFont);
+    painter.setPen(QColor(200, 200, 200));
+    painter.drawText(textX, 14, info2);
 
     // 每个声道的颜色
     static const QColor channelColors[] = {
