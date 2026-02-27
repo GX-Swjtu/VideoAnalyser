@@ -79,3 +79,9 @@ CMakeLists.txt.user*
 .rcc/
 .uic/
 /build*/
+
+# VS Code
+.vscode/
+
+# Qt Creator user files
+CMakeLists.txt.user*

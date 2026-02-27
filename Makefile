@@ -8,8 +8,8 @@ MINGW_DIR    = E:/Qt/Tools/mingw1310_64
 CMAKE        = E:/Qt/Tools/CMake_64/bin/cmake.exe
 
 # 构建目录
-BUILD_DEBUG   = build/debug
-BUILD_RELEASE = build/release
+BUILD_DEBUG   = build/Debug
+BUILD_RELEASE = build/Release
 
 # 编译器
 CXX = $(MINGW_DIR)/bin/g++.exe

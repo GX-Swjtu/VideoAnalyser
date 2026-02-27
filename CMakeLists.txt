@@ -9,16 +9,29 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# 设置目录变量
+set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
+set(INCLUDE_DIR ${CMAKE_SOURCE_DIR}/include)
+set(UI_DIR ${CMAKE_SOURCE_DIR}/ui)
+set(I18N_DIR ${CMAKE_SOURCE_DIR}/i18n)
+
+# AUTOUIC 搜索 ui 目录
+set(CMAKE_AUTOUIC_SEARCH_PATHS ${UI_DIR})
+
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets LinguistTools)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets LinguistTools)
 
-set(TS_FILES VideoAnalyser_zh_CN.ts)
+set(TS_FILES ${I18N_DIR}/VideoAnalyser_zh_CN.ts)
+
+# 自动扫描源文件、头文件和 UI 文件
+file(GLOB_RECURSE SOURCES ${SRC_DIR}/*.cpp ${SRC_DIR}/*.c)
+file(GLOB_RECURSE HEADERS ${INCLUDE_DIR}/*.h ${INCLUDE_DIR}/*.hpp)
+file(GLOB_RECURSE UI_FILES ${UI_DIR}/*.ui)
 
 set(PROJECT_SOURCES
-        main.cpp
-        mainwindow.cpp
-        mainwindow.h
-        mainwindow.ui
+        ${SOURCES}
+        ${HEADERS}
+        ${UI_FILES}
         ${TS_FILES}
 )
 
@@ -49,6 +62,7 @@ else()
     qt5_create_translation(QM_FILES ${CMAKE_SOURCE_DIR} ${TS_FILES})
 endif()
 
+target_include_directories(VideoAnalyser PRIVATE ${INCLUDE_DIR})
 target_link_libraries(VideoAnalyser PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.

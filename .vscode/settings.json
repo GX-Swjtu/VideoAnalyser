@@ -6,5 +6,5 @@
     ],
     "cmake.generator": "Ninja",
     "cmake.cmakePath": "E:/Qt/Tools/CMake_64/bin/cmake.exe",
-    "cmake.buildDirectory": "${workspaceFolder}/build/vscode-${buildType}"
+    "cmake.buildDirectory": "${workspaceFolder}/build/${buildType}"
 }
