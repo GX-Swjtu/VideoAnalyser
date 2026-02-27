@@ -21,6 +21,9 @@ set(CMAKE_AUTOUIC_SEARCH_PATHS ${UI_DIR})
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets LinguistTools)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets LinguistTools)
 
+# FFmpeg
+find_package(FFMPEG REQUIRED)
+
 set(TS_FILES ${I18N_DIR}/VideoAnalyser_zh_CN.ts)
 
 # 自动扫描源文件、头文件和 UI 文件
@@ -40,37 +43,29 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
     )
-# Define target properties for Android with Qt 6 as:
-#    set_property(TARGET VideoAnalyser APPEND PROPERTY QT_ANDROID_PACKAGE_SOURCE_DIR
-#                 ${CMAKE_CURRENT_SOURCE_DIR}/android)
-# For more information, see https://doc.qt.io/qt-6/qt-add-executable.html#target-creation
-
     qt_create_translation(QM_FILES ${CMAKE_SOURCE_DIR} ${TS_FILES})
 else()
     if(ANDROID)
         add_library(VideoAnalyser SHARED
             ${PROJECT_SOURCES}
         )
-# Define properties for Android with Qt 5 after find_package() calls as:
-#    set(ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android")
     else()
         add_executable(VideoAnalyser
             ${PROJECT_SOURCES}
         )
     endif()
-
     qt5_create_translation(QM_FILES ${CMAKE_SOURCE_DIR} ${TS_FILES})
 endif()
 
-target_include_directories(VideoAnalyser PRIVATE ${INCLUDE_DIR})
-target_link_libraries(VideoAnalyser PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
+target_include_directories(VideoAnalyser PRIVATE ${INCLUDE_DIR} ${FFMPEG_INCLUDE_DIRS})
+target_link_directories(VideoAnalyser PRIVATE ${FFMPEG_LIBRARY_DIRS})
+target_link_libraries(VideoAnalyser PRIVATE Qt${QT_VERSION_MAJOR}::Widgets ${FFMPEG_LIBRARIES})
 
-# Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
-# If you are developing for iOS or macOS you should consider setting an
-# explicit, fixed bundle identifier manually though.
+# 平台相关的目标属性
 if(${QT_VERSION} VERSION_LESS 6.1.0)
   set(BUNDLE_ID_OPTION MACOSX_BUNDLE_GUI_IDENTIFIER com.example.VideoAnalyser)
 endif()
+
 set_target_properties(VideoAnalyser PROPERTIES
     ${BUNDLE_ID_OPTION}
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
@@ -90,13 +85,33 @@ if(QT_VERSION_MAJOR EQUAL 6)
     qt_finalize_executable(VideoAnalyser)
 endif()
 
-# 构建后自动部署 Qt DLL
+# ============================================
+# 平台相关的构建后部署
+# ============================================
 if(WIN32)
+    # Windows: 使用 windeployqt 复制 Qt DLL
     find_program(QT_DEPLOY_TOOL windeployqt HINTS "${Qt6_DIR}/../../../bin")
     if(QT_DEPLOY_TOOL)
         add_custom_command(TARGET VideoAnalyser POST_BUILD
             COMMAND "${QT_DEPLOY_TOOL}" "$<TARGET_FILE:VideoAnalyser>" --no-translations
-            COMMENT "Deploying Qt runtime dependencies..."
+            COMMENT "Deploying Qt runtime dependencies (Windows)..."
         )
     endif()
+
+    # Windows: 复制 vcpkg 的 FFmpeg DLL 到构建目录
+    if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+        file(GLOB FFMPEG_DLLS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/bin/*.dll")
+        foreach(DLL_FILE ${FFMPEG_DLLS})
+            add_custom_command(TARGET VideoAnalyser POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DLL_FILE}" "$<TARGET_FILE_DIR:VideoAnalyser>"
+                COMMENT "Copying ${DLL_FILE}..."
+            )
+        endforeach()
+    endif()
+elseif(UNIX AND NOT APPLE)
+    # Linux: 设置 RPATH，使可执行文件能找到相对路径的共享库
+    set_target_properties(VideoAnalyser PROPERTIES
+        INSTALL_RPATH "$ORIGIN/../lib;$ORIGIN"
+        BUILD_RPATH_USE_ORIGIN TRUE
+    )
 endif()

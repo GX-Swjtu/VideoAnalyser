@@ -1,0 +1,20 @@
+{
+    "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+    "name": "videoanalyser",
+    "version-string": "0.1",
+    "description": "Video Analyser - Qt/FFmpeg 视频分析工具",
+    "dependencies": [
+        {
+            "name": "ffmpeg",
+            "features": [
+                "avcodec",
+                "avdevice",
+                "avfilter",
+                "avformat",
+                "swresample",
+                "swscale"
+            ]
+        },
+        "gtest"
+    ]
+}
