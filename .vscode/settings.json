@@ -1,0 +1,10 @@
+{
+    "cmake.configureArgs": [
+        "-DCMAKE_PREFIX_PATH=E:/Qt/6.8.3/mingw_64",
+        "-DCMAKE_CXX_COMPILER=E:/Qt/Tools/mingw1310_64/bin/g++.exe",
+        "-DCMAKE_C_COMPILER=E:/Qt/Tools/mingw1310_64/bin/gcc.exe"
+    ],
+    "cmake.generator": "Ninja",
+    "cmake.cmakePath": "E:/Qt/Tools/CMake_64/bin/cmake.exe",
+    "cmake.buildDirectory": "${workspaceFolder}/build/vscode-${buildType}"
+}

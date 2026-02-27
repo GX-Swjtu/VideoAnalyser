@@ -1,0 +1,12 @@
+[
+    {
+        "name": "Qt 6.8.3 MinGW 13.1.0 64-bit",
+        "compilers": {
+            "CXX": "E:/Qt/Tools/mingw1310_64/bin/g++.exe",
+            "C": "E:/Qt/Tools/mingw1310_64/bin/gcc.exe"
+        },
+        "environmentVariables": {
+            "PATH": "E:/Qt/6.8.3/mingw_64/bin;E:/Qt/Tools/mingw1310_64/bin;${env:PATH}"
+        }
+    }
+]
