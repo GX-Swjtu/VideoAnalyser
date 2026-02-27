@@ -9,16 +9,16 @@
 
 # ---- Windows 配置示例 ----
 # Qt 安装路径（MinGW 版本）
-# QT_DIR       = C:/Qt/6.8.3/mingw_64
+# QT_DIR       = E:/Qt/6.8.3/mingw_64
 
 # MinGW 工具链路径
-# MINGW_DIR    = C:/Qt/Tools/mingw1310_64
+# MINGW_DIR    = E:/Qt/Tools/mingw1310_64
 
 # CMake 可执行文件（如果已加入 PATH 可不设置）
-# CMAKE        = C:/Qt/Tools/CMake_64/bin/cmake.exe
+# CMAKE        = E:/Qt/Tools/CMake_64/bin/cmake.exe
 
 # vcpkg 根目录
-# VCPKG_ROOT   = C:/vcpkg
+# VCPKG_ROOT   = C:/vcpkgCache/vcpkg
 
 # vcpkg triplet（MinGW 用 x64-mingw-dynamic，MSVC 用 x64-windows）
 # VCPKG_TRIPLET = x64-mingw-dynamic

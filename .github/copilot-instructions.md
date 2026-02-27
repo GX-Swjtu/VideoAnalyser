@@ -11,19 +11,23 @@ Qt 6 + FFmpeg (C++17) video packet analyzer. Data flows: **PacketReader** (FFmpe
 
 ## Build & Run
 
-```bash
-# Configure + build (Debug, uses Ninja)
-make debug          # or: cmake --preset windows-mingw-debug && cmake --build --preset windows-mingw-debug
+The project uses **CMake Tools extension** in VS Code as the primary workflow. Build/run/test configuration lives in `.vscode/`.
 
-# Run
-make run
+```bash
+# Build (VS Code: Ctrl+Shift+B, or CMake: Build command)
+# Equivalent terminal command:
+cmake --build build/Debug
+
+# Run / Debug (VS Code: F5 launches GDB via launch.json, preLaunchTask auto-builds)
 
 # Tests
-make debug          # builds both app and tests
 ctest --test-dir build/Debug --output-on-failure
 ```
 
-- Local paths go in `config.mk` (Makefile) or `CMakeUserPresets.json` (CMake Presets) — neither is committed.
+Alternative: `make debug` / `make run` via the project Makefile (local paths in `config.mk`, not committed).
+
+- `.vscode/settings.json` configures CMake generator (Ninja), compiler paths, vcpkg toolchain — these are the actual build settings.
+- `.vscode/launch.json` uses `${command:cmake.launchTargetPath}` with GDB; `preLaunchTask: "CMake: build"` ensures a fresh build before debug.
 - vcpkg auto-installs deps (FFmpeg, GTest) declared in `vcpkg.json` on first configure.
 - `GLOB_RECURSE` auto-collects `src/*.cpp` and `include/*.h` — no CMakeLists edit needed for new files.
 - Tests link against `VideoAnalyserLib` (static lib of all src/ except main.cpp), defined in `tests/CMakeLists.txt`.
