@@ -59,7 +59,7 @@ endif()
 
 target_include_directories(VideoAnalyser PRIVATE ${INCLUDE_DIR} ${FFMPEG_INCLUDE_DIRS})
 target_link_directories(VideoAnalyser PRIVATE ${FFMPEG_LIBRARY_DIRS})
-target_link_libraries(VideoAnalyser PRIVATE Qt${QT_VERSION_MAJOR}::Widgets ${FFMPEG_LIBRARIES})
+target_link_libraries(VideoAnalyser PRIVATE Qt${QT_VERSION_MAJOR}::Widgets ${FFMPEG_LIBRARIES} -lswscale -lswresample)
 
 # 平台相关的目标属性
 if(${QT_VERSION} VERSION_LESS 6.1.0)
@@ -84,6 +84,12 @@ install(TARGETS VideoAnalyser
 if(QT_VERSION_MAJOR EQUAL 6)
     qt_finalize_executable(VideoAnalyser)
 endif()
+
+# ============================================
+# 单元测试
+# ============================================
+enable_testing()
+add_subdirectory(tests)
 
 # ============================================
 # 平台相关的构建后部署
