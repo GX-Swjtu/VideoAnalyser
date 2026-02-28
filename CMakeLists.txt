@@ -13,6 +13,11 @@ option(VA_ENABLE_SANITIZERS "Enable compiler sanitizers" OFF)
 set(VA_SANITIZERS "address,undefined" CACHE STRING "Comma-separated sanitizers, e.g. address,undefined")
 option(VA_STATIC_BUILD "全静态链接，生成单文件可执行程序（绿色版）" OFF)
 
+# MSVC 静态构建：使用静态 CRT (/MT) 以匹配 vcpkg x64-windows-static 的库
+if(VA_STATIC_BUILD AND MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 # 设置目录变量
 set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
 set(INCLUDE_DIR ${CMAKE_SOURCE_DIR}/include)
