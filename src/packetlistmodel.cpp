@@ -191,16 +191,26 @@ PacketFilterProxyModel::PacketFilterProxyModel(QObject *parent)
 
 void PacketFilterProxyModel::setMediaTypeFilter(int type)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
     beginFilterChange();
     m_mediaTypeFilter = type;
     endFilterChange();
+#else
+    m_mediaTypeFilter = type;
+    invalidateFilter();
+#endif
 }
 
 void PacketFilterProxyModel::setStreamIndexFilter(int streamIndex)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
     beginFilterChange();
     m_streamIndexFilter = streamIndex;
     endFilterChange();
+#else
+    m_streamIndexFilter = streamIndex;
+    invalidateFilter();
+#endif
 }
 
 bool PacketFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex &parent) const
