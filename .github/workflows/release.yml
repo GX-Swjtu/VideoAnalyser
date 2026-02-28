@@ -491,7 +491,7 @@ jobs:
           modules: 'qtcharts'
 
       - name: Install system dependencies
-        run: brew install ninja pkg-config nasm
+        run: brew install nasm
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
@@ -555,7 +555,7 @@ jobs:
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
       - name: Install system dependencies
-        run: brew install ninja pkg-config nasm
+        run: brew install nasm
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11

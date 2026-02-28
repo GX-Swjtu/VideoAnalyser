@@ -136,7 +136,7 @@ jobs:
           modules: 'qtcharts'
 
       - name: Install system dependencies
-        run: brew install ninja pkg-config nasm
+        run: brew install nasm
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
