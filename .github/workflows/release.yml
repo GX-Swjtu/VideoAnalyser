@@ -20,7 +20,9 @@ permissions:
   contents: write
 
 env:
-  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  QT_INSTALL_DIR: "${{ github.workspace }}/.qt"
+  VCPKG_DOWNLOADS: "${{ github.workspace }}/.vcpkg/downloads"
+  VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.vcpkg/bincache,readwrite"
   VCPKG_COMMIT: 'b2f068faf45a3f04145bec0f52a66526ad590227'
 
 jobs:
@@ -28,19 +30,35 @@ jobs:
   win-mingw:
     name: Windows MinGW (Dynamic)
     runs-on: windows-latest
+    env:
+      VCPKG_CACHE_TRIPLET: x64-mingw-dynamic
     steps:
       - uses: actions/checkout@v4
 
-      - name: Export GitHub Actions cache variables
-        uses: actions/github-script@v7
+      - name: Cache vcpkg artifacts
+        uses: actions/cache@v4
         with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+          path: |
+            ${{ env.VCPKG_DOWNLOADS }}
+            ${{ github.workspace }}/.vcpkg/bincache
+          key: vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'triplets/*.cmake') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
+            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
+
+      - name: Cache Qt artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.QT_INSTALL_DIR }}
+          key: qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-6.8-win64_mingw-qtcharts-tools_mingw1310
+          restore-keys: |
+            qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-6.8-
+            qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
 
       - name: Install Qt (MinGW)
         uses: jurplel/install-qt-action@v4
         with:
+          dir: '${{ env.QT_INSTALL_DIR }}'
           version: '6.8.*'
           host: 'windows'
           target: 'desktop'
@@ -106,15 +124,30 @@ jobs:
   win-msvc:
     name: Windows MSVC (Dynamic)
     runs-on: windows-latest
+    env:
+      VCPKG_CACHE_TRIPLET: x64-windows
     steps:
       - uses: actions/checkout@v4
 
-      - name: Export GitHub Actions cache variables
-        uses: actions/github-script@v7
+      - name: Cache vcpkg artifacts
+        uses: actions/cache@v4
         with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+          path: |
+            ${{ env.VCPKG_DOWNLOADS }}
+            ${{ github.workspace }}/.vcpkg/bincache
+          key: vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'triplets/*.cmake') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
+            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
+
+      - name: Cache Qt artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.QT_INSTALL_DIR }}
+          key: qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-6.8-win64_msvc2022_64-qtcharts
+          restore-keys: |
+            qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-6.8-
+            qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
@@ -124,6 +157,7 @@ jobs:
       - name: Install Qt (MSVC)
         uses: jurplel/install-qt-action@v4
         with:
+          dir: '${{ env.QT_INSTALL_DIR }}'
           version: '6.8.*'
           host: 'windows'
           target: 'desktop'
@@ -171,19 +205,35 @@ jobs:
   win-mingw-static:
     name: Windows MinGW (Static)
     runs-on: windows-latest
+    env:
+      VCPKG_CACHE_TRIPLET: x64-mingw-static
     steps:
       - uses: actions/checkout@v4
 
-      - name: Export GitHub Actions cache variables
-        uses: actions/github-script@v7
+      - name: Cache vcpkg artifacts
+        uses: actions/cache@v4
         with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+          path: |
+            ${{ env.VCPKG_DOWNLOADS }}
+            ${{ github.workspace }}/.vcpkg/bincache
+          key: vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'triplets/*.cmake') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
+            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
+
+      - name: Cache Qt artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.QT_INSTALL_DIR }}
+          key: qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-6.8-win64_mingw-tools_mingw1310
+          restore-keys: |
+            qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-6.8-
+            qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
 
       - name: Install MinGW
         uses: jurplel/install-qt-action@v4
         with:
+          dir: '${{ env.QT_INSTALL_DIR }}'
           version: '6.8.*'
           host: 'windows'
           target: 'desktop'
@@ -248,15 +298,21 @@ jobs:
   win-msvc-static:
     name: Windows MSVC (Static)
     runs-on: windows-latest
+    env:
+      VCPKG_CACHE_TRIPLET: x64-windows-static
     steps:
       - uses: actions/checkout@v4
 
-      - name: Export GitHub Actions cache variables
-        uses: actions/github-script@v7
+      - name: Cache vcpkg artifacts
+        uses: actions/cache@v4
         with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+          path: |
+            ${{ env.VCPKG_DOWNLOADS }}
+            ${{ github.workspace }}/.vcpkg/bincache
+          key: vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'triplets/*.cmake') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
+            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
 
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
@@ -309,19 +365,35 @@ jobs:
   linux-gcc:
     name: Linux GCC (Dynamic)
     runs-on: ubuntu-24.04
+    env:
+      VCPKG_CACHE_TRIPLET: x64-linux
     steps:
       - uses: actions/checkout@v4
 
-      - name: Export GitHub Actions cache variables
-        uses: actions/github-script@v7
+      - name: Cache vcpkg artifacts
+        uses: actions/cache@v4
         with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+          path: |
+            ${{ env.VCPKG_DOWNLOADS }}
+            ${{ github.workspace }}/.vcpkg/bincache
+          key: vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'triplets/*.cmake') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
+            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
+
+      - name: Cache Qt artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.QT_INSTALL_DIR }}
+          key: qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-6.8-linux_gcc_64-qtcharts
+          restore-keys: |
+            qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-6.8-
+            qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
+          dir: '${{ env.QT_INSTALL_DIR }}'
           version: '6.8.*'
           host: 'linux'
           target: 'desktop'
@@ -420,15 +492,21 @@ jobs:
   linux-gcc-static:
     name: Linux GCC (Static)
     runs-on: ubuntu-24.04
+    env:
+      VCPKG_CACHE_TRIPLET: x64-linux-static
     steps:
       - uses: actions/checkout@v4
 
-      - name: Export GitHub Actions cache variables
-        uses: actions/github-script@v7
+      - name: Cache vcpkg artifacts
+        uses: actions/cache@v4
         with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+          path: |
+            ${{ env.VCPKG_DOWNLOADS }}
+            ${{ github.workspace }}/.vcpkg/bincache
+          key: vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'triplets/*.cmake') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
+            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
 
       - name: Install system dependencies
         run: |
@@ -495,19 +573,35 @@ jobs:
   macos-clang:
     name: macOS Clang (Dynamic)
     runs-on: macos-14
+    env:
+      VCPKG_CACHE_TRIPLET: arm64-osx
     steps:
       - uses: actions/checkout@v4
 
-      - name: Export GitHub Actions cache variables
-        uses: actions/github-script@v7
+      - name: Cache vcpkg artifacts
+        uses: actions/cache@v4
         with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+          path: |
+            ${{ env.VCPKG_DOWNLOADS }}
+            ${{ github.workspace }}/.vcpkg/bincache
+          key: vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'triplets/*.cmake') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
+            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
+
+      - name: Cache Qt artifacts
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.QT_INSTALL_DIR }}
+          key: qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-6.8-qtcharts
+          restore-keys: |
+            qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-6.8-
+            qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
+          dir: '${{ env.QT_INSTALL_DIR }}'
           version: '6.8.*'
           host: 'mac'
           target: 'desktop'
@@ -570,15 +664,21 @@ jobs:
   macos-clang-static:
     name: macOS Clang (Static)
     runs-on: macos-14
+    env:
+      VCPKG_CACHE_TRIPLET: arm64-osx-static
     steps:
       - uses: actions/checkout@v4
 
-      - name: Export GitHub Actions cache variables
-        uses: actions/github-script@v7
+      - name: Cache vcpkg artifacts
+        uses: actions/cache@v4
         with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+          path: |
+            ${{ env.VCPKG_DOWNLOADS }}
+            ${{ github.workspace }}/.vcpkg/bincache
+          key: vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'triplets/*.cmake') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
+            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
 
       - name: Install system dependencies
         run: brew install nasm autoconf automake libtool pkg-config ninja
