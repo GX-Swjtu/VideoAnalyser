@@ -67,6 +67,12 @@ jobs:
           $mingwBin = Get-ChildItem "$env:IQTA_TOOLS\mingw*\bin" -Directory | Select-Object -First 1
           echo "$mingwBin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
 
+      - name: Ensure vcpkg cache directories
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DOWNLOADS" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE/.vcpkg/bincache" | Out-Null
+
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
@@ -130,6 +136,12 @@ jobs:
             libgl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-0 \
             libxcb-xinerama0 libxcb-cursor0
 
+      - name: Ensure vcpkg cache directories
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DOWNLOADS" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE/.vcpkg/bincache" | Out-Null
+
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
@@ -187,6 +199,12 @@ jobs:
 
       - name: Install system dependencies
         run: brew install nasm
+
+      - name: Ensure vcpkg cache directories
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DOWNLOADS" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE/.vcpkg/bincache" | Out-Null
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11

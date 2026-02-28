@@ -72,6 +72,12 @@ jobs:
           $mingwBin = Get-ChildItem "$env:IQTA_TOOLS\mingw*\bin" -Directory | Select-Object -First 1
           echo "$mingwBin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
 
+      - name: Ensure vcpkg cache directories
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DOWNLOADS" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE/.vcpkg/bincache" | Out-Null
+
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
@@ -164,6 +170,12 @@ jobs:
           arch: 'win64_msvc2022_64'
           modules: 'qtcharts'
 
+      - name: Ensure vcpkg cache directories
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DOWNLOADS" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE/.vcpkg/bincache" | Out-Null
+
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
@@ -247,6 +259,12 @@ jobs:
           $mingwBin = Get-ChildItem "$env:IQTA_TOOLS\mingw*\bin" -Directory | Select-Object -First 1
           echo "$mingwBin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
 
+      - name: Ensure vcpkg cache directories
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DOWNLOADS" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE/.vcpkg/bincache" | Out-Null
+
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
@@ -321,6 +339,12 @@ jobs:
 
       - name: Install pkg-config
         run: choco install pkgconfiglite -y
+
+      - name: Ensure vcpkg cache directories
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DOWNLOADS" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE/.vcpkg/bincache" | Out-Null
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
@@ -406,6 +430,12 @@ jobs:
           sudo apt-get install -y ninja-build pkg-config nasm patchelf \
             libgl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-0 \
             libxcb-xinerama0 libxcb-cursor0
+
+      - name: Ensure vcpkg cache directories
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DOWNLOADS" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE/.vcpkg/bincache" | Out-Null
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
@@ -531,6 +561,12 @@ jobs:
             libsystemd-dev libudev-dev \
             libxshmfence-dev libxxf86vm-dev
 
+      - name: Ensure vcpkg cache directories
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DOWNLOADS" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE/.vcpkg/bincache" | Out-Null
+
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
@@ -610,6 +646,12 @@ jobs:
       - name: Install system dependencies
         run: brew install nasm
 
+      - name: Ensure vcpkg cache directories
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DOWNLOADS" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE/.vcpkg/bincache" | Out-Null
+
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
@@ -682,6 +724,12 @@ jobs:
 
       - name: Install system dependencies
         run: brew install nasm autoconf automake libtool pkg-config ninja
+
+      - name: Ensure vcpkg cache directories
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DOWNLOADS" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE/.vcpkg/bincache" | Out-Null
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
