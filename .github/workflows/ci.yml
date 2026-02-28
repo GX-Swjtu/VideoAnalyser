@@ -110,6 +110,8 @@ jobs:
         run: cmake --build --preset linux-debug
 
       - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
         run: ctest --preset linux-debug --output-on-failure
 
   debug-macos:
