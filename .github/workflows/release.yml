@@ -511,7 +511,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ninja-build pkg-config nasm \
             autoconf autoconf-archive automake libtool libltdl-dev \
-            libgl1-mesa-dev libegl1-mesa-dev \
+            libgl1-mesa-dev libegl1-mesa-dev libgbm-dev \
+            libvulkan-dev libssl-dev libcups2-dev \
+            libglib2.0-dev libclang-dev \
             libfontconfig1-dev libfreetype6-dev \
             libx11-dev libx11-xcb-dev libxext-dev libxfixes-dev \
             libxi-dev libxrender-dev libxrandr-dev libxcursor-dev \
@@ -523,6 +525,7 @@ jobs:
             libxcb-randr0-dev libxcb-sync-dev \
             libxcb-shm0-dev libxcb-cursor-dev \
             libxcb-xinerama0-dev libxcb-util-dev \
+            libxcb-xkb-dev libxcb-xinput-dev \
             libatspi2.0-dev libdbus-1-dev \
             libharfbuzz-dev libdrm-dev \
             libinput-dev libmtdev-dev \
