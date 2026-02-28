@@ -41,15 +41,10 @@ jobs:
           $mingwBin = Get-ChildItem "$env:IQTA_TOOLS\mingw*\bin" -Directory | Select-Object -First 1
           echo "$mingwBin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
 
-      - name: Configure Git for vcpkg
-        run: |
-          git config --global core.longpaths true
-          git config --global --add safe.directory '*'
-
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgGitCommitId: '86a181505ac6460200db5aad85e51c8dab1de040'
+          vcpkgGitCommitId: 'b2f068faf45a3f04145bec0f52a66526ad590227'
 
       - name: Configure
         shell: pwsh
@@ -97,7 +92,7 @@ jobs:
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgGitCommitId: '86a181505ac6460200db5aad85e51c8dab1de040'
+          vcpkgGitCommitId: 'b2f068faf45a3f04145bec0f52a66526ad590227'
 
       - name: Configure
         run: |
@@ -144,15 +139,10 @@ jobs:
           $mingwBin = Get-ChildItem "$env:IQTA_TOOLS\mingw*\bin" -Directory | Select-Object -First 1
           echo "$mingwBin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
 
-      - name: Configure Git for vcpkg
-        run: |
-          git config --global core.longpaths true
-          git config --global --add safe.directory '*'
-
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgGitCommitId: '86a181505ac6460200db5aad85e51c8dab1de040'
+          vcpkgGitCommitId: 'b2f068faf45a3f04145bec0f52a66526ad590227'
 
       - name: Configure (static)
         shell: pwsh
