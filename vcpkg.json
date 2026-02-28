@@ -24,7 +24,7 @@
                 {
                     "name": "qtbase",
                     "default-features": false,
-                    "features": ["concurrent", "widgets", "png", "jpeg", "freetype"]
+                    "features": ["concurrent", "widgets", "network", "png", "jpeg", "freetype"]
                 },
                 "qtcharts",
                 "qttools"

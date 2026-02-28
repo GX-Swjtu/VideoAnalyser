@@ -36,6 +36,7 @@ private slots:
     void openFile();
     void onPacketDoubleClicked(const QModelIndex &index);
     void onFilterChanged(int comboIndex);
+    void showAboutDialog();
 
 private:
     void setupUI();

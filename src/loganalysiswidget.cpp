@@ -120,8 +120,14 @@ LogFilterProxyModel::LogFilterProxyModel(QObject *parent)
 
 void LogFilterProxyModel::setMinLevel(int level)
 {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+    beginFilterChange();
+    m_minLevel = level;
+    endFilterChange();
+#else
     m_minLevel = level;
     invalidateFilter();
+#endif
 }
 
 bool LogFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex &sourceParent) const

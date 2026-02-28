@@ -1,6 +1,6 @@
 enable_testing()
 find_package(GTest REQUIRED)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Concurrent Charts)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Concurrent Charts Network)
 
 # FFmpeg
 if(VA_STATIC_BUILD)
@@ -42,6 +42,7 @@ target_link_libraries(VideoAnalyserLib PUBLIC
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Concurrent
     Qt${QT_VERSION_MAJOR}::Charts
+    Qt${QT_VERSION_MAJOR}::Network
     ${FFMPEG_LIBRARIES}
 )
 set_target_properties(VideoAnalyserLib PROPERTIES
@@ -52,6 +53,18 @@ set_target_properties(VideoAnalyserLib PROPERTIES
 if(TARGET VideoAnalyserSanitizers)
     target_link_libraries(VideoAnalyserLib PRIVATE VideoAnalyserSanitizers)
 endif()
+
+# 构建期信息宏（与主目标保持一致）
+target_compile_definitions(VideoAnalyserLib PUBLIC
+    APP_VERSION="${GIT_VERSION}"
+    APP_BUILD_TYPE="$<CONFIG>"
+    APP_COMPILER_ID="${CMAKE_CXX_COMPILER_ID}"
+    APP_COMPILER_VERSION="${CMAKE_CXX_COMPILER_VERSION}"
+    APP_BUILD_TIMESTAMP="${BUILD_TIMESTAMP}"
+    APP_OS_NAME="${CMAKE_SYSTEM_NAME}"
+    APP_OS_VERSION="${CMAKE_SYSTEM_VERSION}"
+    APP_STATIC_BUILD=$<BOOL:${VA_STATIC_BUILD}>
+)
 
 # 测试可执行文件
 file(GLOB TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test_*.cpp)

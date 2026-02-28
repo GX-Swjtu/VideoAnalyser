@@ -7,6 +7,7 @@
 #include "bitratechartwidget.h"
 #include "avsyncchartwidget.h"
 #include "loganalysiswidget.h"
+#include "aboutdialog.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -15,6 +16,7 @@
 #include <QHeaderView>
 #include <QComboBox>
 #include <QLabel>
+#include <QPushButton>
 #include <QMenuBar>
 #include <QToolBar>
 #include <QStatusBar>
@@ -133,6 +135,20 @@ void MainWindow::setupMenuAndToolbar()
     connect(m_filterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &MainWindow::onFilterChanged);
     toolbar->addWidget(m_filterCombo);
+
+    // 弹簧 — 将后续按钮推到工具栏最右侧
+    auto *spacer = new QWidget();
+    spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    toolbar->addWidget(spacer);
+
+    auto *aboutBtn = new QPushButton(QStringLiteral("ℹ️关于"));
+    aboutBtn->setFlat(true);
+    aboutBtn->setCursor(Qt::PointingHandCursor);
+    aboutBtn->setStyleSheet(QStringLiteral(
+        "QPushButton { padding: 4px 12px; border-radius: 4px; }"
+        "QPushButton:hover { background: palette(midlight); }"));
+    connect(aboutBtn, &QPushButton::clicked, this, &MainWindow::showAboutDialog);
+    toolbar->addWidget(aboutBtn);
 }
 
 void MainWindow::dragEnterEvent(QDragEnterEvent *event)
@@ -297,4 +313,10 @@ void MainWindow::clearAllAnalysis()
     m_bitrateChartWidget->clear();
     m_avsyncChartWidget->clear();
     // Log 页不清空（日志累积显示）
+}
+
+void MainWindow::showAboutDialog()
+{
+    auto *dlg = new AboutDialog(this);
+    dlg->exec();
 }

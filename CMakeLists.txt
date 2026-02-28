@@ -2,6 +2,28 @@ cmake_minimum_required(VERSION 3.16)
 
 project(VideoAnalyser VERSION 0.1 LANGUAGES CXX)
 
+# ============================================
+# 构建期信息自动检测（传递给 AboutDialog）
+# ============================================
+# Git 版本号：优先使用 git describe，无 tag 时 fallback 到 PROJECT_VERSION
+find_package(Git QUIET)
+if(GIT_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} describe --tags --always --dirty
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+        RESULT_VARIABLE GIT_RESULT
+    )
+endif()
+if(NOT GIT_FOUND OR NOT GIT_RESULT EQUAL 0 OR GIT_VERSION STREQUAL "")
+    set(GIT_VERSION "${PROJECT_VERSION}")
+endif()
+
+# 构建时间戳
+string(TIMESTAMP BUILD_TIMESTAMP "%Y-%m-%d %H:%M:%S")
+
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -27,8 +49,8 @@ set(I18N_DIR ${CMAKE_SOURCE_DIR}/i18n)
 # AUTOUIC 搜索 ui 目录
 set(CMAKE_AUTOUIC_SEARCH_PATHS ${UI_DIR})
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets LinguistTools Concurrent Charts)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets LinguistTools Concurrent Charts)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets LinguistTools Concurrent Charts Network)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets LinguistTools Concurrent Charts Network)
 
 # FFmpeg
 if(VA_STATIC_BUILD)
@@ -121,10 +143,22 @@ endif()
 
 target_include_directories(VideoAnalyser PRIVATE ${INCLUDE_DIR} ${FFMPEG_INCLUDE_DIRS})
 target_link_directories(VideoAnalyser PRIVATE ${FFMPEG_LIBRARY_DIRS})
-target_link_libraries(VideoAnalyser PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Concurrent Qt${QT_VERSION_MAJOR}::Charts ${FFMPEG_LIBRARIES})
+target_link_libraries(VideoAnalyser PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Concurrent Qt${QT_VERSION_MAJOR}::Charts Qt${QT_VERSION_MAJOR}::Network ${FFMPEG_LIBRARIES})
 if(TARGET VideoAnalyserSanitizers)
     target_link_libraries(VideoAnalyser PRIVATE VideoAnalyserSanitizers)
 endif()
+
+# 构建期信息宏（AboutDialog 使用）
+target_compile_definitions(VideoAnalyser PRIVATE
+    APP_VERSION="${GIT_VERSION}"
+    APP_BUILD_TYPE="$<CONFIG>"
+    APP_COMPILER_ID="${CMAKE_CXX_COMPILER_ID}"
+    APP_COMPILER_VERSION="${CMAKE_CXX_COMPILER_VERSION}"
+    APP_BUILD_TIMESTAMP="${BUILD_TIMESTAMP}"
+    APP_OS_NAME="${CMAKE_SYSTEM_NAME}"
+    APP_OS_VERSION="${CMAKE_SYSTEM_VERSION}"
+    APP_STATIC_BUILD=$<BOOL:${VA_STATIC_BUILD}>
+)
 
 # 全静态构建：体积优化（strip + gc-sections + LTO）
 if(VA_STATIC_BUILD)
