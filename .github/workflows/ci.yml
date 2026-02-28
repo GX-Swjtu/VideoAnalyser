@@ -1,3 +1,8 @@
+# ============================================
+# CI 工作流：push / PR 到 main 时快速验证
+# 仅 Debug 构建 + 测试（Win MinGW + Linux GCC）— 2 job
+# Release / 静态构建由 Release workflow（push v* tag）负责
+# ============================================
 name: CI
 
 on:
@@ -8,12 +13,16 @@ on:
 
 env:
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  VCPKG_COMMIT: 'b2f068faf45a3f04145bec0f52a66526ad590227'
 
 jobs:
-  build-windows:
-    name: Windows (MinGW)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # 核心门禁：Debug 构建 + 测试（每次 push 和 PR 必跑）
+  # 目的：断言检查、编译警告、快速反馈
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  debug-windows:
+    name: Debug — Windows MinGW
     runs-on: windows-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -24,7 +33,7 @@ jobs:
             core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
-      - name: Install Qt
+      - name: Install Qt (MinGW)
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.8.*'
@@ -37,14 +46,13 @@ jobs:
       - name: Set up MinGW
         shell: pwsh
         run: |
-          # install-qt-action puts MinGW tools under $env:IQTA_TOOLS
           $mingwBin = Get-ChildItem "$env:IQTA_TOOLS\mingw*\bin" -Directory | Select-Object -First 1
           echo "$mingwBin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgGitCommitId: 'b2f068faf45a3f04145bec0f52a66526ad590227'
+          vcpkgGitCommitId: '${{ env.VCPKG_COMMIT }}'
 
       - name: Configure
         shell: pwsh
@@ -59,10 +67,9 @@ jobs:
       - name: Test
         run: ctest --preset windows-debug --output-on-failure
 
-  build-linux:
-    name: Linux (GCC)
+  debug-linux:
+    name: Debug — Linux GCC
     runs-on: ubuntu-24.04
-
     steps:
       - uses: actions/checkout@v4
 
@@ -92,7 +99,7 @@ jobs:
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
-          vcpkgGitCommitId: 'b2f068faf45a3f04145bec0f52a66526ad590227'
+          vcpkgGitCommitId: '${{ env.VCPKG_COMMIT }}'
 
       - name: Configure
         run: |
@@ -104,74 +111,3 @@ jobs:
 
       - name: Test
         run: ctest --preset linux-debug --output-on-failure
-
-  # ============================================
-  # 全静态构建：生成单文件绿色版可执行程序
-  # Qt 和 FFmpeg 均通过 vcpkg 静态编译，无需外部 Qt 安装
-  # ============================================
-  build-windows-static:
-    name: Windows Static (Green)
-    runs-on: windows-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Export GitHub Actions cache variables
-        uses: actions/github-script@v7
-        with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
-
-      - name: Install MinGW
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: '6.8.*'
-          host: 'windows'
-          target: 'desktop'
-          arch: 'win64_mingw'
-          tools: 'tools_mingw1310'
-          install-deps: false
-
-      - name: Set up MinGW
-        shell: pwsh
-        run: |
-          $mingwBin = Get-ChildItem "$env:IQTA_TOOLS\mingw*\bin" -Directory | Select-Object -First 1
-          echo "$mingwBin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
-
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgGitCommitId: 'b2f068faf45a3f04145bec0f52a66526ad590227'
-
-      - name: Configure (static)
-        shell: pwsh
-        run: |
-          cmake --preset windows-static `
-            -DCMAKE_MAKE_PROGRAM="$(Get-Command ninja | Select-Object -ExpandProperty Source)"
-
-      - name: Build (static)
-        run: cmake --build --preset windows-static
-
-      - name: Verify single executable
-        shell: pwsh
-        run: |
-          $exe = Get-ChildItem "build/windows-static/VideoAnalyser.exe" -ErrorAction Stop
-          Write-Host "✅ Static executable: $($exe.FullName) ($([math]::Round($exe.Length / 1MB, 2)) MB)"
-          # 确认不依赖项目构建的 DLL（系统 DLL 如 kernel32 等是正常的）
-          $deps = & objdump -p $exe.FullName 2>$null | Select-String "DLL Name:" |
-                  ForEach-Object { ($_ -split "DLL Name:\s*")[1].Trim() } |
-                  Where-Object { $_ -notmatch '^(KERNEL32|USER32|GDI32|SHELL32|ADVAPI32|COMCTL32|COMDLG32|ole32|OLEAUT32|WS2_32|WSOCK32|IMM32|WINMM|dwmapi|UxTheme|VERSION|NETAPI32|USERENV|WTSAPI32|SHLWAPI|CRYPT32|bcrypt|ncrypt|secur32|iphlpapi|dnsapi|msvcrt|ntdll|api-ms-|ext-ms-)' }
-          if ($deps) {
-            Write-Host "⚠️  Non-system DLL dependencies found:"
-            $deps | ForEach-Object { Write-Host "   $_" }
-          } else {
-            Write-Host "✅ No non-system DLL dependencies"
-          }
-
-      - name: Upload static executable
-        uses: actions/upload-artifact@v4
-        with:
-          name: VideoAnalyser-static-win64
-          path: build/windows-static/VideoAnalyser.exe
-          if-no-files-found: error

@@ -1,0 +1,501 @@
+# ============================================
+# Release 工作流：push tag (v*) 时自动构建并发布
+# 生成 6 个变体的发行资产：
+#   1. Windows MinGW Release 动态链接压缩包
+#   2. Windows MSVC  Release 动态链接压缩包
+#   3. Windows MinGW Release 静态单文件
+#   4. Windows MSVC  Release 静态单文件
+#   5. Linux   GCC   Release 动态链接压缩包
+#   6. Linux   GCC   Release 静态单文件
+# ============================================
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  VCPKG_COMMIT: 'b2f068faf45a3f04145bec0f52a66526ad590227'
+
+jobs:
+  # ── 1. Windows MinGW 动态链接 ─────────────────────────
+  win-mingw:
+    name: Windows MinGW (Dynamic)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Export GitHub Actions cache variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Install Qt (MinGW)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.*'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_mingw'
+          modules: 'qtcharts'
+          tools: 'tools_mingw1310'
+
+      - name: Set up MinGW
+        shell: pwsh
+        run: |
+          $mingwBin = Get-ChildItem "$env:IQTA_TOOLS\mingw*\bin" -Directory | Select-Object -First 1
+          echo "$mingwBin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '${{ env.VCPKG_COMMIT }}'
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake --preset windows-release `
+            -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" `
+            -DCMAKE_MAKE_PROGRAM="$(Get-Command ninja | Select-Object -ExpandProperty Source)"
+
+      - name: Build
+        run: cmake --build --preset windows-release
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}"
+          $dir = "VideoAnalyser-${version}-windows-mingw-x64"
+          $buildDir = "build/windows-release"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          # 复制可执行文件和所有 DLL（windeployqt + vcpkg 已部署到构建目录）
+          Copy-Item "$buildDir/VideoAnalyser.exe" "$dir/"
+          Get-ChildItem "$buildDir/*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination "$dir/"
+          # 复制 Qt 插件子目录
+          foreach ($sub in @("platforms","styles","imageformats","iconengines","tls","generic","networkinformation")) {
+            if (Test-Path "$buildDir/$sub") { Copy-Item -Recurse "$buildDir/$sub" "$dir/" }
+          }
+          # 复制 MinGW 运行时 DLL（如果 windeployqt 未自动处理）
+          $mingwBin = (Get-Command gcc.exe -ErrorAction SilentlyContinue).Source | Split-Path
+          if ($mingwBin) {
+            foreach ($dll in @("libgcc_s_seh-1.dll","libstdc++-6.dll","libwinpthread-1.dll")) {
+              $src = Join-Path $mingwBin $dll
+              if (Test-Path $src) { Copy-Item $src "$dir/" -ErrorAction SilentlyContinue }
+            }
+          }
+          Copy-Item "LICENSE" "$dir/" -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$dir/*" -DestinationPath "${dir}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win-mingw-dynamic
+          path: VideoAnalyser-*-windows-mingw-x64.zip
+
+  # ── 2. Windows MSVC 动态链接 ──────────────────────────
+  win-msvc:
+    name: Windows MSVC (Dynamic)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Export GitHub Actions cache variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64
+
+      - name: Install Qt (MSVC)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.*'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_msvc2022_64'
+          modules: 'qtcharts'
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '${{ env.VCPKG_COMMIT }}'
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake --preset windows-msvc-release `
+            -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+
+      - name: Build
+        run: cmake --build --preset windows-msvc-release
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}"
+          $dir = "VideoAnalyser-${version}-windows-msvc-x64"
+          $buildDir = "build/windows-msvc-release"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Copy-Item "$buildDir/VideoAnalyser.exe" "$dir/"
+          Get-ChildItem "$buildDir/*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination "$dir/"
+          foreach ($sub in @("platforms","styles","imageformats","iconengines","tls","generic","networkinformation")) {
+            if (Test-Path "$buildDir/$sub") { Copy-Item -Recurse "$buildDir/$sub" "$dir/" }
+          }
+          Copy-Item "LICENSE" "$dir/" -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$dir/*" -DestinationPath "${dir}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win-msvc-dynamic
+          path: VideoAnalyser-*-windows-msvc-x64.zip
+
+  # ── 3. Windows MinGW 静态单文件 ──────────────────────
+  win-mingw-static:
+    name: Windows MinGW (Static)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Export GitHub Actions cache variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Install MinGW
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.*'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_mingw'
+          tools: 'tools_mingw1310'
+          install-deps: false
+
+      - name: Set up MinGW
+        shell: pwsh
+        run: |
+          $mingwBin = Get-ChildItem "$env:IQTA_TOOLS\mingw*\bin" -Directory | Select-Object -First 1
+          echo "$mingwBin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '${{ env.VCPKG_COMMIT }}'
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake --preset windows-static `
+            -DCMAKE_MAKE_PROGRAM="$(Get-Command ninja | Select-Object -ExpandProperty Source)"
+
+      - name: Build
+        run: cmake --build --preset windows-static
+
+      - name: Verify single executable
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem "build/windows-static/VideoAnalyser.exe" -ErrorAction Stop
+          Write-Host "Static executable: $($exe.FullName) ($([math]::Round($exe.Length / 1MB, 2)) MB)"
+          $deps = & objdump -p $exe.FullName 2>$null | Select-String "DLL Name:" |
+                  ForEach-Object { ($_ -split "DLL Name:\s*")[1].Trim() } |
+                  Where-Object { $_ -notmatch '^(KERNEL32|USER32|GDI32|SHELL32|ADVAPI32|COMCTL32|COMDLG32|ole32|OLEAUT32|WS2_32|WSOCK32|IMM32|WINMM|dwmapi|UxTheme|VERSION|NETAPI32|USERENV|WTSAPI32|SHLWAPI|CRYPT32|bcrypt|ncrypt|secur32|iphlpapi|dnsapi|msvcrt|ntdll|api-ms-|ext-ms-)' }
+          if ($deps) {
+            Write-Host "Non-system DLL dependencies found:"
+            $deps | ForEach-Object { Write-Host "  $_" }
+          } else {
+            Write-Host "No non-system DLL dependencies — truly portable"
+          }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}"
+          $dir = "VideoAnalyser-${version}-windows-mingw-x64-static"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Copy-Item "build/windows-static/VideoAnalyser.exe" "$dir/"
+          Copy-Item "LICENSE" "$dir/" -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$dir/*" -DestinationPath "${dir}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win-mingw-static
+          path: VideoAnalyser-*-windows-mingw-x64-static.zip
+
+  # ── 4. Windows MSVC 静态单文件 ───────────────────────
+  win-msvc-static:
+    name: Windows MSVC (Static)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Export GitHub Actions cache variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64
+
+      - name: Install pkg-config
+        run: choco install pkgconfiglite -y
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '${{ env.VCPKG_COMMIT }}'
+
+      - name: Configure
+        shell: pwsh
+        run: cmake --preset windows-msvc-static
+
+      - name: Build
+        run: cmake --build --preset windows-msvc-static
+
+      - name: Verify single executable
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem "build/windows-msvc-static/VideoAnalyser.exe" -ErrorAction Stop
+          Write-Host "Static executable: $($exe.FullName) ($([math]::Round($exe.Length / 1MB, 2)) MB)"
+          # MSVC 静态链接使用 /MT，不依赖 vcruntime DLL
+          & dumpbin /dependents $exe.FullName 2>$null | Select-String "\.dll" |
+            ForEach-Object { Write-Host "  $($_.Line.Trim())" }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}"
+          $dir = "VideoAnalyser-${version}-windows-msvc-x64-static"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Copy-Item "build/windows-msvc-static/VideoAnalyser.exe" "$dir/"
+          Copy-Item "LICENSE" "$dir/" -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$dir/*" -DestinationPath "${dir}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: win-msvc-static
+          path: VideoAnalyser-*-windows-msvc-x64-static.zip
+
+  # ── 5. Linux GCC 动态链接 ─────────────────────────────
+  linux-gcc:
+    name: Linux GCC (Dynamic)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Export GitHub Actions cache variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.*'
+          host: 'linux'
+          target: 'desktop'
+          arch: 'linux_gcc_64'
+          modules: 'qtcharts'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config nasm patchelf \
+            libgl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-0 \
+            libxcb-xinerama0 libxcb-cursor0
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '${{ env.VCPKG_COMMIT }}'
+
+      - name: Configure
+        run: |
+          cmake --preset linux-release \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
+
+      - name: Build
+        run: cmake --build --preset linux-release
+
+      - name: Package
+        run: |
+          version="${{ github.ref_name }}"
+          dir="VideoAnalyser-${version}-linux-gcc-x64"
+          mkdir -p "$dir/lib" "$dir/plugins/platforms"
+
+          # 复制主程序
+          cp build/linux-release/VideoAnalyser "$dir/"
+
+          # 用 ldd 收集非系统共享库（Qt、FFmpeg 等）
+          ldd "build/linux-release/VideoAnalyser" | \
+            awk '/=>/ && !/linux-vdso|ld-linux/ {print $3}' | sort -u | \
+            while read -r lib; do
+              [ -z "$lib" ] && continue
+              base="$(basename "$lib")"
+              # 跳过基础系统库（glibc、libm、libdl、线程库等）
+              case "$base" in
+                libc.so*|libm.so*|libdl.so*|librt.so*|libpthread.so*) continue ;;
+                libgcc_s.so*|libstdc++.so*|ld-linux*) continue ;;
+              esac
+              cp -L "$lib" "$dir/lib/" 2>/dev/null || true
+            done
+
+          # Qt 平台插件
+          if [ -d "$QT_ROOT_DIR/plugins/platforms" ]; then
+            cp "$QT_ROOT_DIR/plugins/platforms/libqxcb.so" "$dir/plugins/platforms/" 2>/dev/null || true
+            cp "$QT_ROOT_DIR/plugins/platforms/libqwayland"*.so "$dir/plugins/platforms/" 2>/dev/null || true
+          fi
+          # 收集平台插件自身的非系统依赖
+          for plugin in "$dir"/plugins/platforms/*.so; do
+            [ -f "$plugin" ] || continue
+            ldd "$plugin" 2>/dev/null | awk '/=>/ && !/linux-vdso|ld-linux/ {print $3}' | \
+              while read -r lib; do
+                [ -z "$lib" ] && continue
+                base="$(basename "$lib")"
+                case "$base" in
+                  libc.so*|libm.so*|libdl.so*|librt.so*|libpthread.so*|libgcc_s.so*|libstdc++.so*|ld-linux*) continue ;;
+                esac
+                [ -f "$dir/lib/$base" ] || cp -L "$lib" "$dir/lib/" 2>/dev/null || true
+              done
+          done
+
+          # 设置 RPATH，使程序能找到打包的共享库
+          patchelf --set-rpath '$ORIGIN/lib' "$dir/VideoAnalyser" 2>/dev/null || true
+
+          # 创建启动脚本
+          cat > "$dir/VideoAnalyser.sh" << 'SCRIPT'
+          #!/bin/bash
+          HERE="$(cd "$(dirname "$0")" && pwd)"
+          export LD_LIBRARY_PATH="${HERE}/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+          export QT_PLUGIN_PATH="${HERE}/plugins"
+          exec "${HERE}/VideoAnalyser" "$@"
+          SCRIPT
+          chmod +x "$dir/VideoAnalyser.sh"
+
+          cp LICENSE "$dir/" 2>/dev/null || true
+          tar czf "${dir}.tar.gz" "$dir"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-gcc-dynamic
+          path: VideoAnalyser-*-linux-gcc-x64.tar.gz
+
+  # ── 6. Linux GCC 静态单文件 ──────────────────────────
+  linux-gcc-static:
+    name: Linux GCC (Static)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Export GitHub Actions cache variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config nasm \
+            libgl1-mesa-dev libegl1-mesa-dev \
+            libfontconfig1-dev libfreetype6-dev \
+            libx11-dev libx11-xcb-dev libxext-dev libxfixes-dev \
+            libxi-dev libxrender-dev libxrandr-dev libxcursor-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev \
+            libxcb1-dev libxcb-glx0-dev \
+            libxcb-keysyms1-dev libxcb-image0-dev \
+            libxcb-render-util0-dev libxcb-icccm4-dev \
+            libxcb-shape0-dev libxcb-xfixes0-dev \
+            libxcb-randr0-dev libxcb-sync-dev \
+            libxcb-shm0-dev libxcb-cursor-dev \
+            libxcb-xinerama0-dev libxcb-util-dev \
+            libatspi2.0-dev libdbus-1-dev \
+            libharfbuzz-dev libdrm-dev \
+            libinput-dev libmtdev-dev \
+            libsystemd-dev libudev-dev \
+            libxshmfence-dev libxxf86vm-dev
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '${{ env.VCPKG_COMMIT }}'
+
+      - name: Configure
+        run: cmake --preset linux-static
+
+      - name: Build
+        run: cmake --build --preset linux-static
+
+      - name: Verify executable
+        run: |
+          exe="build/linux-static/VideoAnalyser"
+          ls -lh "$exe"
+          echo "--- Dynamic dependencies (should only be system libs) ---"
+          ldd "$exe" || echo "(fully static — no dynamic deps)"
+          file "$exe"
+
+      - name: Package
+        run: |
+          version="${{ github.ref_name }}"
+          dir="VideoAnalyser-${version}-linux-gcc-x64-static"
+          mkdir -p "$dir"
+          cp build/linux-static/VideoAnalyser "$dir/"
+          cp LICENSE "$dir/" 2>/dev/null || true
+          tar czf "${dir}.tar.gz" "$dir"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-gcc-static
+          path: VideoAnalyser-*-linux-gcc-x64-static.tar.gz
+
+  # ── 创建 GitHub Release ──────────────────────────────
+  release:
+    name: Create Release
+    needs:
+      - win-mingw
+      - win-msvc
+      - win-mingw-static
+      - win-msvc-static
+      - linux-gcc
+      - linux-gcc-static
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name '*.zip' -o -name '*.tar.gz' \) -exec cp {} release/ \;
+          echo "=== Release assets ==="
+          ls -lh release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}

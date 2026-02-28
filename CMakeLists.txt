@@ -121,22 +121,31 @@ if(TARGET VideoAnalyserSanitizers)
     target_link_libraries(VideoAnalyser PRIVATE VideoAnalyserSanitizers)
 endif()
 
-# 全静态链接：添加 MinGW 运行时静态链接标志 + 体积优化
-if(VA_STATIC_BUILD AND MINGW)
-    target_link_options(VideoAnalyser PRIVATE -static)
-
-    # 按函数/数据段分割 + 链接时丢弃未引用段（去除未使用的库代码）
-    target_compile_options(VideoAnalyser PRIVATE -ffunction-sections -fdata-sections)
-    target_link_options(VideoAnalyser PRIVATE -Wl,--gc-sections)
-
-    # LTO（跨编译单元优化，进一步消除死代码）
-    set_target_properties(VideoAnalyser PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
-
-    # 构建后自动 strip 调试符号（效果最显著）
-    add_custom_command(TARGET VideoAnalyser POST_BUILD
-        COMMAND ${CMAKE_STRIP} "$<TARGET_FILE:VideoAnalyser>"
-        COMMENT "Stripping debug symbols from static executable..."
-    )
+# 全静态构建：体积优化（strip + gc-sections + LTO）
+if(VA_STATIC_BUILD)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        # GCC/Clang 通用优化：按段分割 + 链接时丢弃未引用段
+        target_compile_options(VideoAnalyser PRIVATE -ffunction-sections -fdata-sections)
+        target_link_options(VideoAnalyser PRIVATE -Wl,--gc-sections)
+        # LTO（跨编译单元优化，进一步消除死代码）
+        set_target_properties(VideoAnalyser PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
+        if(MINGW)
+            # MinGW：同时静态链接 CRT（-static 使 libgcc/libstdc++/libwinpthread 全部静态链接）
+            target_link_options(VideoAnalyser PRIVATE -static)
+        endif()
+        # strip 调试符号（效果最显著，通常减 60-80%）
+        add_custom_command(TARGET VideoAnalyser POST_BUILD
+            COMMAND ${CMAKE_STRIP} "$<TARGET_FILE:VideoAnalyser>"
+            COMMENT "Stripping debug symbols from static executable..."
+        )
+    elseif(MSVC)
+        # MSVC：函数级链接 /Gy + 去除未引用代码 /OPT:REF + 折叠相同 COMDAT /OPT:ICF
+        target_compile_options(VideoAnalyser PRIVATE /Gy)
+        target_link_options(VideoAnalyser PRIVATE /OPT:REF /OPT:ICF)
+        # LTO（全程序优化：编译 /GL + 链接 /LTCG）
+        set_target_properties(VideoAnalyser PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
+        # MSVC Release 模式默认不生成调试符号 PDB，无需额外 strip
+    endif()
 endif()
 
 # 平台相关的目标属性

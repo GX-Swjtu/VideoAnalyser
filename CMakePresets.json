@@ -111,6 +111,35 @@
             }
         },
         {
+            "name": "windows-msvc-release",
+            "displayName": "Windows Release (MSVC)",
+            "description": "Windows MSVC Release 构建（动态链接）",
+            "inherits": "release",
+            "cacheVariables": {
+                "VCPKG_TARGET_TRIPLET": "x64-windows"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "windows-msvc-static",
+            "displayName": "Windows Static (MSVC)",
+            "description": "Windows MSVC 全静态构建，生成单文件绿色版",
+            "inherits": "static",
+            "cacheVariables": {
+                "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+                "VCPKG_HOST_TRIPLET": "x64-windows"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
             "name": "linux-debug",
             "displayName": "Linux Debug",
             "description": "Linux GCC/Clang Debug 构建。需设置环境变量 VCPKG_ROOT",
@@ -142,16 +171,34 @@
                 "lhs": "${hostSystemName}",
                 "rhs": "Linux"
             }
+        },
+        {
+            "name": "linux-static",
+            "displayName": "Linux Static",
+            "description": "Linux GCC 全静态构建，Qt/FFmpeg 静态链接，仅依赖系统库",
+            "inherits": "static",
+            "cacheVariables": {
+                "VCPKG_TARGET_TRIPLET": "x64-linux-static",
+                "VCPKG_HOST_TRIPLET": "x64-linux"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            }
         }
     ],
     "buildPresets": [
         { "name": "windows-debug",   "configurePreset": "windows-debug" },
         { "name": "windows-release", "configurePreset": "windows-release" },
         { "name": "windows-asan",    "configurePreset": "windows-asan" },
-        { "name": "windows-static",  "configurePreset": "windows-static" },
-        { "name": "linux-debug",     "configurePreset": "linux-debug" },
-        { "name": "linux-release",   "configurePreset": "linux-release" },
-        { "name": "linux-asan",      "configurePreset": "linux-asan" }
+        { "name": "windows-static",       "configurePreset": "windows-static" },
+        { "name": "windows-msvc-release", "configurePreset": "windows-msvc-release" },
+        { "name": "windows-msvc-static",  "configurePreset": "windows-msvc-static" },
+        { "name": "linux-debug",          "configurePreset": "linux-debug" },
+        { "name": "linux-release",        "configurePreset": "linux-release" },
+        { "name": "linux-asan",           "configurePreset": "linux-asan" },
+        { "name": "linux-static",         "configurePreset": "linux-static" }
     ],
     "testPresets": [
         {

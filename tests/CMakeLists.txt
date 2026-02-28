@@ -69,9 +69,11 @@ set_target_properties(VideoAnalyserTests PROPERTIES AUTOMOC ON)
 if(TARGET VideoAnalyserSanitizers)
     target_link_libraries(VideoAnalyserTests PRIVATE VideoAnalyserSanitizers)
 endif()
-# 全静态链接：添加 MinGW 运行时静态链接标志
-if(VA_STATIC_BUILD AND MINGW)
-    target_link_options(VideoAnalyserTests PRIVATE -static)
+# 全静态构建：添加运行时静态链接标志
+if(VA_STATIC_BUILD)
+    if(MINGW)
+        target_link_options(VideoAnalyserTests PRIVATE -static)
+    endif()
 endif()
 
 # 测试数据路径
