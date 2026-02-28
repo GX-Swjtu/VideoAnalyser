@@ -31,7 +31,7 @@
 | **Qt** | 6.x (推荐 6.8+) | UI 框架，需要 Widgets、Charts、Concurrent 和 LinguistTools 模块 |
 | **FFmpeg** | 6.x+ | 音视频解封装和解码 |
 | **vcpkg** | — | C++ 包管理器，管理 FFmpeg 和 GTest 依赖 |
-| **C++ 编译器** | C++17 | MinGW 13+ / GCC 9+ / MSVC 2019+ |
+| **C++ 编译器** | C++17 | MinGW 13+ / GCC 9+ / MSVC 2019+ / Apple Clang 14+ |
 
 ## 快速开始
 
@@ -57,6 +57,12 @@ $env:VCPKG_ROOT = "C:\vcpkg"
 git clone https://github.com/microsoft/vcpkg.git ~/vcpkg
 ~/vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT="$HOME/vcpkg"  # 添加到 ~/.bashrc 或 ~/.zshrc
+
+# macOS
+git clone https://github.com/microsoft/vcpkg.git ~/vcpkg
+~/vcpkg/bootstrap-vcpkg.sh
+export VCPKG_ROOT="$HOME/vcpkg"  # 添加到 ~/.zshrc
+brew install ninja pkg-config nasm  # 系统依赖
 ```
 
 vcpkg 会在首次 CMake 配置时自动安装 `vcpkg.json` 中声明的依赖（FFmpeg、GTest）。FFmpeg 首次编译耗时较长（10–30 分钟），后续会使用缓存。
@@ -97,6 +103,17 @@ export CMAKE_PREFIX_PATH="$HOME/Qt/6.8.3/gcc_64"   # 你的 Qt 安装路径
 cmake --preset linux-debug
 cmake --build --preset linux-debug
 ctest --preset linux-debug
+```
+
+**macOS：**
+
+```bash
+export VCPKG_ROOT="$HOME/vcpkg"
+export CMAKE_PREFIX_PATH="$HOME/Qt/6.8.3/macos"    # 你的 Qt 安装路径
+
+cmake --preset macos-debug
+cmake --build --preset macos-debug
+ctest --preset macos-debug
 ```
 
 > 💡 **小贴士**：将 `VCPKG_ROOT` 和 `CMAKE_PREFIX_PATH` 添加到系统环境变量中，以后就不必每次手动设置。
@@ -207,6 +224,11 @@ cmake --preset linux-debug
 cmake --build --preset linux-debug
 ctest --preset linux-debug
 
+# macOS
+cmake --preset macos-debug
+cmake --build --preset macos-debug
+ctest --preset macos-debug
+
 # 使用 CMakeUserPresets 的用户
 ctest --preset local-debug
 ```
@@ -218,9 +240,17 @@ ctest --preset local-debug
 | `windows-debug` | Windows | MinGW Debug 构建 |
 | `windows-release` | Windows | MinGW Release 构建 |
 | `windows-asan` | Windows | MinGW Debug + AddressSanitizer |
+| `windows-static` | Windows | MinGW 全静态单文件构建 |
+| `windows-msvc-release` | Windows | MSVC Release 构建 |
+| `windows-msvc-static` | Windows | MSVC 全静态单文件构建 |
 | `linux-debug` | Linux | GCC/Clang Debug 构建 |
 | `linux-release` | Linux | GCC/Clang Release 构建 |
 | `linux-asan` | Linux | GCC/Clang Debug + AddressSanitizer |
+| `linux-static` | Linux | GCC 全静态单文件构建 |
+| `macos-debug` | macOS | Clang Debug 构建 |
+| `macos-release` | macOS | Clang Release 构建 |
+| `macos-asan` | macOS | Clang Debug + AddressSanitizer |
+| `macos-static` | macOS | Clang 全静态构建（ARM64） |
 
 > 以上 preset 通过 `$env{VCPKG_ROOT}` 环境变量定位 vcpkg。如需覆盖编译器等路径，创建 `CMakeUserPresets.json`（参见 `CMakeUserPresets.json.example`）。
 

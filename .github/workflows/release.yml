@@ -7,6 +7,8 @@
 #   4. Windows MSVC  Release 静态单文件
 #   5. Linux   GCC   Release 动态链接压缩包
 #   6. Linux   GCC   Release 静态单文件
+#   7. macOS   Clang Release 动态链接 DMG（Apple Silicon）
+#   8. macOS   Clang Release 静态单文件（Apple Silicon）
 # ============================================
 name: Release
 
@@ -466,6 +468,133 @@ jobs:
           name: linux-gcc-static
           path: VideoAnalyser-*-linux-gcc-x64-static.tar.gz
 
+  # ── 7. macOS Clang 动态链接 ───────────────────────────
+  macos-clang:
+    name: macOS Clang (Dynamic)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Export GitHub Actions cache variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.*'
+          host: 'mac'
+          target: 'desktop'
+          modules: 'qtcharts'
+
+      - name: Install system dependencies
+        run: brew install ninja pkg-config nasm
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '${{ env.VCPKG_COMMIT }}'
+
+      - name: Configure
+        run: |
+          cmake --preset macos-release \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
+
+      - name: Build
+        run: cmake --build --preset macos-release
+
+      - name: Package
+        run: |
+          version="${{ github.ref_name }}"
+          app_name="VideoAnalyser"
+          dmg_name="${app_name}-${version}-macos-arm64"
+          build_dir="build/macos-release"
+
+          # macdeployqt 已在构建后自动执行，.app 内已包含 Qt 框架
+          # 复制 vcpkg 的 FFmpeg dylib 到 .app/Contents/Frameworks
+          frameworks_dir="${build_dir}/${app_name}.app/Contents/Frameworks"
+          mkdir -p "$frameworks_dir"
+          if [ -d "${VCPKG_ROOT}/installed/arm64-osx/lib" ]; then
+            find "${VCPKG_ROOT}/installed/arm64-osx/lib" -name "*.dylib" -exec cp {} "$frameworks_dir/" \; 2>/dev/null || true
+          fi
+
+          # 使用 install_name_tool 修复 dylib 的加载路径
+          for lib in "$frameworks_dir"/*.dylib; do
+            [ -f "$lib" ] || continue
+            install_name_tool -id "@executable_path/../Frameworks/$(basename "$lib")" "$lib" 2>/dev/null || true
+          done
+
+          # 创建 DMG
+          mkdir -p dmg_staging
+          cp -R "${build_dir}/${app_name}.app" dmg_staging/
+          ln -s /Applications dmg_staging/Applications
+          cp LICENSE dmg_staging/ 2>/dev/null || true
+          hdiutil create -volname "$app_name" -srcfolder dmg_staging \
+            -ov -format UDZO "${dmg_name}.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-clang-dynamic
+          path: VideoAnalyser-*-macos-arm64.dmg
+
+  # ── 8. macOS Clang 静态单文件 ─────────────────────────
+  macos-clang-static:
+    name: macOS Clang (Static)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Export GitHub Actions cache variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Install system dependencies
+        run: brew install ninja pkg-config nasm
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '${{ env.VCPKG_COMMIT }}'
+
+      - name: Configure
+        run: cmake --preset macos-static
+
+      - name: Build
+        run: cmake --build --preset macos-static
+
+      - name: Verify executable
+        run: |
+          app="build/macos-static/VideoAnalyser.app/Contents/MacOS/VideoAnalyser"
+          ls -lh "$app"
+          echo "--- Dynamic dependencies (should only be system frameworks) ---"
+          otool -L "$app"
+          file "$app"
+
+      - name: Package
+        run: |
+          version="${{ github.ref_name }}"
+          dir="VideoAnalyser-${version}-macos-arm64-static"
+          mkdir -p "$dir"
+          cp -R build/macos-static/VideoAnalyser.app "$dir/"
+          cp LICENSE "$dir/" 2>/dev/null || true
+          # 创建 DMG
+          mkdir -p dmg_staging
+          cp -R "$dir/VideoAnalyser.app" dmg_staging/
+          ln -s /Applications dmg_staging/Applications
+          hdiutil create -volname "VideoAnalyser" -srcfolder dmg_staging \
+            -ov -format UDZO "${dir}.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-clang-static
+          path: VideoAnalyser-*-macos-arm64-static.dmg
+
   # ── 创建 GitHub Release ──────────────────────────────
   release:
     name: Create Release
@@ -476,6 +605,8 @@ jobs:
       - win-msvc-static
       - linux-gcc
       - linux-gcc-static
+      - macos-clang
+      - macos-clang-static
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

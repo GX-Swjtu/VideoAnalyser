@@ -124,9 +124,14 @@ endif()
 # 全静态构建：体积优化（strip + gc-sections + LTO）
 if(VA_STATIC_BUILD)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-        # GCC/Clang 通用优化：按段分割 + 链接时丢弃未引用段
-        target_compile_options(VideoAnalyser PRIVATE -ffunction-sections -fdata-sections)
-        target_link_options(VideoAnalyser PRIVATE -Wl,--gc-sections)
+        if(APPLE)
+            # macOS: Apple linker 使用 -dead_strip 消除未引用代码
+            target_link_options(VideoAnalyser PRIVATE -Wl,-dead_strip)
+        else()
+            # Linux/MinGW: GNU ld 使用 --gc-sections 消除未引用段
+            target_compile_options(VideoAnalyser PRIVATE -ffunction-sections -fdata-sections)
+            target_link_options(VideoAnalyser PRIVATE -Wl,--gc-sections)
+        endif()
         # LTO（跨编译单元优化，进一步消除死代码）
         set_target_properties(VideoAnalyser PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
         if(MINGW)
@@ -207,4 +212,13 @@ elseif(UNIX AND NOT APPLE AND NOT VA_STATIC_BUILD)
         INSTALL_RPATH "$ORIGIN/../lib;$ORIGIN"
         BUILD_RPATH_USE_ORIGIN TRUE
     )
+elseif(APPLE AND NOT VA_STATIC_BUILD)
+    # macOS: 使用 macdeployqt 将 Qt 框架打包到 .app bundle
+    find_program(QT_MAC_DEPLOY_TOOL macdeployqt HINTS "${Qt6_DIR}/../../../bin")
+    if(QT_MAC_DEPLOY_TOOL)
+        add_custom_command(TARGET VideoAnalyser POST_BUILD
+            COMMAND "${QT_MAC_DEPLOY_TOOL}" "$<TARGET_BUNDLE_DIR:VideoAnalyser>"
+            COMMENT "Deploying Qt runtime dependencies (macOS)..."
+        )
+    endif()
 endif()

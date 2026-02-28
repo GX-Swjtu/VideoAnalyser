@@ -1,6 +1,6 @@
 # ============================================
 # CI 工作流：push / PR 到 main 时快速验证
-# 仅 Debug 构建 + 测试（Win MinGW + Linux GCC）— 2 job
+# 仅 Debug 构建 + 测试（Win MinGW + Linux GCC + macOS Clang）— 3 job
 # Release / 静态构建由 Release workflow（push v* tag）负责
 # ============================================
 name: CI
@@ -111,3 +111,43 @@ jobs:
 
       - name: Test
         run: ctest --preset linux-debug --output-on-failure
+
+  debug-macos:
+    name: Debug — macOS Clang
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Export GitHub Actions cache variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.*'
+          host: 'mac'
+          target: 'desktop'
+          modules: 'qtcharts'
+
+      - name: Install system dependencies
+        run: brew install ninja pkg-config nasm
+
+      - name: Setup vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: '${{ env.VCPKG_COMMIT }}'
+
+      - name: Configure
+        run: |
+          cmake --preset macos-debug \
+            -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
+
+      - name: Build
+        run: cmake --build --preset macos-debug
+
+      - name: Test
+        run: ctest --preset macos-debug --output-on-failure

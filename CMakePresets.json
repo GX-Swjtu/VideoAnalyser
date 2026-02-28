@@ -186,6 +186,54 @@
                 "lhs": "${hostSystemName}",
                 "rhs": "Linux"
             }
+        },
+        {
+            "name": "macos-debug",
+            "displayName": "macOS Debug",
+            "description": "macOS Clang Debug 构建。需设置环境变量 VCPKG_ROOT",
+            "inherits": "debug",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            }
+        },
+        {
+            "name": "macos-release",
+            "displayName": "macOS Release",
+            "description": "macOS Clang Release 构建",
+            "inherits": "release",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            }
+        },
+        {
+            "name": "macos-asan",
+            "displayName": "macOS ASan+UBSan",
+            "description": "macOS Debug + AddressSanitizer 构建",
+            "inherits": "asan",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            }
+        },
+        {
+            "name": "macos-static",
+            "displayName": "macOS Static",
+            "description": "macOS Clang 全静态构建，Qt/FFmpeg 静态链接，仅依赖系统框架",
+            "inherits": "static",
+            "cacheVariables": {
+                "VCPKG_TARGET_TRIPLET": "arm64-osx-static",
+                "VCPKG_HOST_TRIPLET": "arm64-osx"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            }
         }
     ],
     "buildPresets": [
@@ -198,7 +246,11 @@
         { "name": "linux-debug",          "configurePreset": "linux-debug" },
         { "name": "linux-release",        "configurePreset": "linux-release" },
         { "name": "linux-asan",           "configurePreset": "linux-asan" },
-        { "name": "linux-static",         "configurePreset": "linux-static" }
+        { "name": "linux-static",         "configurePreset": "linux-static" },
+        { "name": "macos-debug",          "configurePreset": "macos-debug" },
+        { "name": "macos-release",        "configurePreset": "macos-release" },
+        { "name": "macos-asan",           "configurePreset": "macos-asan" },
+        { "name": "macos-static",         "configurePreset": "macos-static" }
     ],
     "testPresets": [
         {
@@ -219,6 +271,16 @@
         {
             "name": "linux-asan",
             "configurePreset": "linux-asan",
+            "output": { "outputOnFailure": true }
+        },
+        {
+            "name": "macos-debug",
+            "configurePreset": "macos-debug",
+            "output": { "outputOnFailure": true }
+        },
+        {
+            "name": "macos-asan",
+            "configurePreset": "macos-asan",
             "output": { "outputOnFailure": true }
         }
     ]
