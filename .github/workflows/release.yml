@@ -69,6 +69,9 @@ jobs:
       - name: Build
         run: cmake --build --preset windows-release
 
+      - name: Test
+        run: ctest --test-dir build/windows-release --output-on-failure
+
       - name: Package
         shell: pwsh
         run: |
@@ -141,6 +144,9 @@ jobs:
       - name: Build
         run: cmake --build --preset windows-msvc-release
 
+      - name: Test
+        run: ctest --test-dir build/windows-msvc-release --output-on-failure
+
       - name: Package
         shell: pwsh
         run: |
@@ -205,6 +211,9 @@ jobs:
       - name: Build
         run: cmake --build --preset windows-static
 
+      - name: Test
+        run: ctest --test-dir build/windows-static --output-on-failure
+
       - name: Verify single executable
         shell: pwsh
         run: |
@@ -268,6 +277,9 @@ jobs:
 
       - name: Build
         run: cmake --build --preset windows-msvc-static
+
+      - name: Test
+        run: ctest --test-dir build/windows-msvc-static --output-on-failure
 
       - name: Verify single executable
         shell: pwsh
@@ -335,6 +347,11 @@ jobs:
 
       - name: Build
         run: cmake --build --preset linux-release
+
+      - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --test-dir build/linux-release --output-on-failure
 
       - name: Package
         run: |
@@ -417,6 +434,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build pkg-config nasm \
+            autoconf autoconf-archive automake libtool \
             libgl1-mesa-dev libegl1-mesa-dev \
             libfontconfig1-dev libfreetype6-dev \
             libx11-dev libx11-xcb-dev libxext-dev libxfixes-dev \
@@ -445,6 +463,11 @@ jobs:
 
       - name: Build
         run: cmake --build --preset linux-static
+
+      - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --test-dir build/linux-static --output-on-failure
 
       - name: Verify executable
         run: |
@@ -506,6 +529,9 @@ jobs:
       - name: Build
         run: cmake --build --preset macos-release
 
+      - name: Test
+        run: ctest --test-dir build/macos-release --output-on-failure
+
       - name: Package
         run: |
           version="${{ github.ref_name }}"
@@ -555,7 +581,7 @@ jobs:
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
       - name: Install system dependencies
-        run: brew install nasm
+        run: brew install nasm autoconf automake libtool pkg-config ninja
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
@@ -567,6 +593,9 @@ jobs:
 
       - name: Build
         run: cmake --build --preset macos-static
+
+      - name: Test
+        run: ctest --test-dir build/macos-static --output-on-failure
 
       - name: Verify executable
         run: |
