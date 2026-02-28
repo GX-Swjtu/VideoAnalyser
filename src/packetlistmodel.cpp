@@ -191,14 +191,16 @@ PacketFilterProxyModel::PacketFilterProxyModel(QObject *parent)
 
 void PacketFilterProxyModel::setMediaTypeFilter(int type)
 {
+    beginFilterChange();
     m_mediaTypeFilter = type;
-    invalidateFilter();
+    endFilterChange();
 }
 
 void PacketFilterProxyModel::setStreamIndexFilter(int streamIndex)
 {
+    beginFilterChange();
     m_streamIndexFilter = streamIndex;
-    invalidateFilter();
+    endFilterChange();
 }
 
 bool PacketFilterProxyModel::filterAcceptsRow(int sourceRow, const QModelIndex &parent) const
