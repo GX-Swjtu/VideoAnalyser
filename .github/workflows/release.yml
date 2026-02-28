@@ -723,7 +723,7 @@ jobs:
             vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
 
       - name: Install system dependencies
-        run: brew install nasm autoconf automake libtool pkg-config ninja
+        run: brew install nasm autoconf autoconf-archive automake libtool pkg-config ninja
 
       - name: Ensure vcpkg cache directories
         shell: pwsh
