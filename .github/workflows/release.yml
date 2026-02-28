@@ -509,28 +509,24 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
+          # vcpkg qtbase port 要求: '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev
+          # libxrender-dev libxi-dev libxkbcommon-dev libxkbcommon-x11-dev libegl1-mesa-dev
           sudo apt-get install -y ninja-build pkg-config nasm \
             autoconf autoconf-archive automake libtool libltdl-dev \
-            libgl1-mesa-dev libegl1-mesa-dev libgbm-dev \
+            libgl1-mesa-dev libglu1-mesa-dev libegl1-mesa-dev libgbm-dev \
             libvulkan-dev libssl-dev libcups2-dev \
             libglib2.0-dev libclang-dev \
             libfontconfig1-dev libfreetype6-dev \
             libx11-dev libx11-xcb-dev libxext-dev libxfixes-dev \
             libxi-dev libxrender-dev libxrandr-dev libxcursor-dev \
             libxkbcommon-dev libxkbcommon-x11-dev \
-            libxcb1-dev libxcb-glx0-dev \
-            libxcb-keysyms1-dev libxcb-image0-dev \
-            libxcb-render-util0-dev libxcb-icccm4-dev \
-            libxcb-shape0-dev libxcb-xfixes0-dev \
-            libxcb-randr0-dev libxcb-sync-dev \
-            libxcb-shm0-dev libxcb-cursor-dev \
-            libxcb-xinerama0-dev libxcb-util-dev \
-            libxcb-xkb-dev libxcb-xinput-dev \
+            '^libxcb.*-dev' \
             libatspi2.0-dev libdbus-1-dev \
             libharfbuzz-dev libdrm-dev \
             libinput-dev libmtdev-dev \
             libsystemd-dev libudev-dev \
-            libxshmfence-dev libxxf86vm-dev
+            libxshmfence-dev libxxf86vm-dev \
+            libwayland-dev
 
       - name: Ensure vcpkg cache directories
         shell: pwsh
@@ -545,6 +541,23 @@ jobs:
 
       - name: Configure
         run: cmake --preset linux-static
+
+      - name: Dump vcpkg build logs on failure
+        if: failure()
+        run: |
+          echo "=== vcpkg manifest install log ==="
+          cat build/linux-static/vcpkg-manifest-install.log 2>/dev/null || true
+          for log in vcpkg/buildtrees/qtbase/config-x64-linux-out.log \
+                     vcpkg/buildtrees/qtbase/config-x64-linux-rel-CMakeConfigureLog.yaml.log \
+                     vcpkg/buildtrees/qtbase/config-x64-linux-dbg-CMakeConfigureLog.yaml.log \
+                     vcpkg/buildtrees/qtbase/config-x64-linux-static-out.log \
+                     vcpkg/buildtrees/qtbase/config-x64-linux-static-rel-CMakeConfigureLog.yaml.log \
+                     vcpkg/buildtrees/qtbase/config-x64-linux-static-dbg-CMakeConfigureLog.yaml.log; do
+            if [ -f "$log" ]; then
+              echo "=== $(basename "$log") (last 120 lines) ==="
+              tail -120 "$log"
+            fi
+          done
 
       - name: Build
         run: cmake --build --preset linux-static
