@@ -21,7 +21,11 @@
         "static-qt": {
             "description": "通过 vcpkg 安装 Qt（用于全静态构建，生成单文件绿色版）",
             "dependencies": [
-                "qtbase",
+                {
+                    "name": "qtbase",
+                    "default-features": false,
+                    "features": ["concurrent", "widgets", "png", "jpeg", "freetype"]
+                },
                 "qtcharts",
                 "qttools"
             ]
