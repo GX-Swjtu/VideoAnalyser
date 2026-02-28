@@ -1,6 +1,6 @@
 # VideoAnalyser
 
-[![CI](https://github.com/<your-username>/VideoAnalyser/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-username>/VideoAnalyser/actions/workflows/ci.yml)
+[![CI](https://github.com/GX-Swjtu/VideoAnalyser/actions/workflows/ci.yml/badge.svg)](https://github.com/GX-Swjtu/VideoAnalyser/actions/workflows/ci.yml)
 
 基于 **Qt 6 + FFmpeg** 的通用视频 Packet 分析工具。打开任意格式的视频文件，遍历所有 AVPacket 并以表格形式展示，双击可查看 Packet 详情（元数据、Hex 原始数据、解码内容）。
 
