@@ -64,6 +64,15 @@ if(VA_STATIC_BUILD)
     set(FFMPEG_INCLUDE_DIRS ${FFMPEG_PC_INCLUDE_DIRS})
     set(FFMPEG_LIBRARY_DIRS ${FFMPEG_PC_STATIC_LIBRARY_DIRS})
     set(FFMPEG_LIBRARIES    ${FFMPEG_PC_STATIC_LIBRARIES})
+    # macOS 静态 FFmpeg 依赖硬件加速框架，pkg-config 的 .pc 可能未包含
+    if(APPLE)
+        list(APPEND FFMPEG_LIBRARIES
+            "-framework AudioToolbox"
+            "-framework CoreMedia"
+            "-framework VideoToolbox"
+            "-framework CoreVideo"
+        )
+    endif()
 else()
     find_package(FFMPEG REQUIRED)
     # Qt 自带的 FindFFmpeg 模块可能不将 swscale/swresample 包含在 FFMPEG_LIBRARIES 中
