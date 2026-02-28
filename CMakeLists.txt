@@ -9,6 +9,9 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+option(VA_ENABLE_SANITIZERS "Enable compiler sanitizers" OFF)
+set(VA_SANITIZERS "address,undefined" CACHE STRING "Comma-separated sanitizers, e.g. address,undefined")
+
 # 设置目录变量
 set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
 set(INCLUDE_DIR ${CMAKE_SOURCE_DIR}/include)
@@ -23,6 +26,36 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets LinguistTools Con
 
 # FFmpeg
 find_package(FFMPEG REQUIRED)
+
+if(VA_ENABLE_SANITIZERS)
+    add_library(VideoAnalyserSanitizers INTERFACE)
+
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        string(REPLACE "," ";" _va_sanitizer_list "${VA_SANITIZERS}")
+        set(_va_sanitizer_flags)
+        foreach(_san IN LISTS _va_sanitizer_list)
+            string(STRIP "${_san}" _san)
+            if(NOT _san STREQUAL "")
+                list(APPEND _va_sanitizer_flags "-fsanitize=${_san}")
+            endif()
+        endforeach()
+        list(APPEND _va_sanitizer_flags "-fno-omit-frame-pointer")
+
+        target_compile_options(VideoAnalyserSanitizers INTERFACE ${_va_sanitizer_flags})
+        target_link_options(VideoAnalyserSanitizers INTERFACE ${_va_sanitizer_flags})
+        message(STATUS "Sanitizers enabled: ${VA_SANITIZERS}")
+    elseif(MSVC)
+        if(VA_SANITIZERS MATCHES "address")
+            target_compile_options(VideoAnalyserSanitizers INTERFACE /fsanitize=address /Zi)
+            target_link_options(VideoAnalyserSanitizers INTERFACE /INCREMENTAL:NO)
+            message(WARNING "MSVC currently supports AddressSanitizer only; ignoring unsupported sanitizers from VA_SANITIZERS='${VA_SANITIZERS}'")
+        else()
+            message(WARNING "VA_ENABLE_SANITIZERS is ON but VA_SANITIZERS='${VA_SANITIZERS}' is not supported by MSVC")
+        endif()
+    else()
+        message(WARNING "Sanitizers requested, but compiler '${CMAKE_CXX_COMPILER_ID}' is not configured for sanitizer flags")
+    endif()
+endif()
 
 set(TS_FILES ${I18N_DIR}/VideoAnalyser_zh_CN.ts)
 
@@ -60,6 +93,9 @@ endif()
 target_include_directories(VideoAnalyser PRIVATE ${INCLUDE_DIR} ${FFMPEG_INCLUDE_DIRS})
 target_link_directories(VideoAnalyser PRIVATE ${FFMPEG_LIBRARY_DIRS})
 target_link_libraries(VideoAnalyser PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Concurrent Qt${QT_VERSION_MAJOR}::Charts ${FFMPEG_LIBRARIES} -lswscale -lswresample)
+if(TARGET VideoAnalyserSanitizers)
+    target_link_libraries(VideoAnalyser PRIVATE VideoAnalyserSanitizers)
+endif()
 
 # 平台相关的目标属性
 if(${QT_VERSION} VERSION_LESS 6.1.0)

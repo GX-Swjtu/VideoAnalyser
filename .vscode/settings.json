@@ -1,13 +1,4 @@
 {
-    "cmake.configureArgs": [
-        "-DCMAKE_PREFIX_PATH=E:/Qt/6.8.3/mingw_64",
-        "-DCMAKE_TOOLCHAIN_FILE=C:/vcpkgCache/vcpkg/scripts/buildsystems/vcpkg.cmake",
-        "-DVCPKG_TARGET_TRIPLET=x64-mingw-dynamic",
-        "-DCMAKE_CXX_COMPILER=E:/Qt/Tools/mingw1310_64/bin/g++.exe",
-        "-DCMAKE_C_COMPILER=E:/Qt/Tools/mingw1310_64/bin/gcc.exe",
-        "-DCMAKE_MAKE_PROGRAM=E:/Qt/Tools/Ninja/ninja.exe"
-    ],
-    "cmake.generator": "Ninja",
     "cmake.cmakePath": "E:/Qt/Tools/CMake_64/bin/cmake.exe",
-    "cmake.buildDirectory": "${workspaceFolder}/build/${buildType}"
+    "cmake.useCMakePresets": "always"
 }

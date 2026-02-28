@@ -27,6 +27,9 @@ set_target_properties(VideoAnalyserLib PROPERTIES
     AUTOUIC ON
     CMAKE_AUTOUIC_SEARCH_PATHS ${CMAKE_SOURCE_DIR}/ui
 )
+if(TARGET VideoAnalyserSanitizers)
+    target_link_libraries(VideoAnalyserLib PRIVATE VideoAnalyserSanitizers)
+endif()
 
 # 测试可执行文件
 file(GLOB TEST_SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/test_*.cpp)
@@ -41,6 +44,9 @@ target_link_libraries(VideoAnalyserTests PRIVATE
     GTest::gtest
 )
 set_target_properties(VideoAnalyserTests PROPERTIES AUTOMOC ON)
+if(TARGET VideoAnalyserSanitizers)
+    target_link_libraries(VideoAnalyserTests PRIVATE VideoAnalyserSanitizers)
+endif()
 
 # 测试数据路径
 target_compile_definitions(VideoAnalyserTests PRIVATE

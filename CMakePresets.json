@@ -16,94 +16,47 @@
             }
         },
         {
-            "name": "windows-mingw-debug",
-            "displayName": "Windows MinGW Debug",
-            "description": "Windows + MinGW + vcpkg Debug 构建",
+            "name": "debug",
+            "hidden": true,
             "inherits": "base",
-            "condition": {
-                "type": "equals",
-                "lhs": "${hostSystemName}",
-                "rhs": "Windows"
-            },
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Debug"
             }
         },
         {
-            "name": "windows-mingw-release",
-            "displayName": "Windows MinGW Release",
-            "description": "Windows + MinGW + vcpkg Release 构建",
+            "name": "release",
+            "hidden": true,
             "inherits": "base",
-            "condition": {
-                "type": "equals",
-                "lhs": "${hostSystemName}",
-                "rhs": "Windows"
-            },
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release"
             }
         },
         {
-            "name": "linux-debug",
-            "displayName": "Linux Debug",
-            "description": "Linux GCC Debug 构建",
-            "inherits": "base",
-            "condition": {
-                "type": "equals",
-                "lhs": "${hostSystemName}",
-                "rhs": "Linux"
-            },
+            "name": "asan",
+            "hidden": true,
+            "description": "Debug 构建（AddressSanitizer + UndefinedBehaviorSanitizer）",
+            "inherits": "debug",
             "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Debug"
-            }
-        },
-        {
-            "name": "linux-release",
-            "displayName": "Linux Release",
-            "description": "Linux GCC Release 构建",
-            "inherits": "base",
-            "condition": {
-                "type": "equals",
-                "lhs": "${hostSystemName}",
-                "rhs": "Linux"
-            },
-            "cacheVariables": {
-                "CMAKE_BUILD_TYPE": "Release"
+                "VA_ENABLE_SANITIZERS": "ON",
+                "VA_SANITIZERS": "address,undefined"
             }
         }
     ],
     "buildPresets": [
-        {
-            "name": "windows-mingw-debug",
-            "configurePreset": "windows-mingw-debug"
-        },
-        {
-            "name": "windows-mingw-release",
-            "configurePreset": "windows-mingw-release"
-        },
-        {
-            "name": "linux-debug",
-            "configurePreset": "linux-debug"
-        },
-        {
-            "name": "linux-release",
-            "configurePreset": "linux-release"
-        }
+        { "name": "debug",   "configurePreset": "debug" },
+        { "name": "release", "configurePreset": "release" },
+        { "name": "asan",    "configurePreset": "asan" }
     ],
     "testPresets": [
         {
-            "name": "windows-mingw-debug",
-            "configurePreset": "windows-mingw-debug",
-            "output": {
-                "outputOnFailure": true
-            }
+            "name": "debug",
+            "configurePreset": "debug",
+            "output": { "outputOnFailure": true }
         },
         {
-            "name": "linux-debug",
-            "configurePreset": "linux-debug",
-            "output": {
-                "outputOnFailure": true
-            }
+            "name": "asan",
+            "configurePreset": "asan",
+            "output": { "outputOnFailure": true }
         }
     ]
 }

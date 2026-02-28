@@ -9,12 +9,6 @@
             "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
-            "environment": [
-                {
-                    "name": "PATH",
-                    "value": "E:/Qt/6.8.3/mingw_64/bin;E:/Qt/Tools/mingw1310_64/bin;${env:PATH}"
-                }
-            ],
             "externalConsole": false,
             "MIMode": "gdb",
             "miDebuggerPath": "E:/Qt/Tools/mingw1310_64/bin/gdb.exe",
@@ -25,8 +19,7 @@
                     "ignoreFailures": true
                 }
             ],
-            "preLaunchTask": "CMake: build",
-            "condition": "${command:cmake.platformIs} == 'windows'"
+            "preLaunchTask": "CMake: build"
         },
         {
             "name": "Debug VideoAnalyser (Linux)",

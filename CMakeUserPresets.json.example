@@ -2,8 +2,10 @@
     "version": 6,
     "configurePresets": [
         {
-            "name": "windows-mingw-debug",
-            "inherits": "windows-mingw-debug",
+            "name": "local-debug",
+            "displayName": "Local Debug",
+            "inherits": "debug",
+            "binaryDir": "${sourceDir}/build/Debug",
             "cacheVariables": {
                 "CMAKE_PREFIX_PATH": "E:/Qt/6.8.3/mingw_64",
                 "CMAKE_CXX_COMPILER": "E:/Qt/Tools/mingw1310_64/bin/g++.exe",
@@ -14,8 +16,10 @@
             }
         },
         {
-            "name": "windows-mingw-release",
-            "inherits": "windows-mingw-release",
+            "name": "local-release",
+            "displayName": "Local Release",
+            "inherits": "release",
+            "binaryDir": "${sourceDir}/build/Release",
             "cacheVariables": {
                 "CMAKE_PREFIX_PATH": "E:/Qt/6.8.3/mingw_64",
                 "CMAKE_CXX_COMPILER": "E:/Qt/Tools/mingw1310_64/bin/g++.exe",
@@ -24,6 +28,37 @@
                 "CMAKE_TOOLCHAIN_FILE": "C:/vcpkgCache/vcpkg/scripts/buildsystems/vcpkg.cmake",
                 "VCPKG_TARGET_TRIPLET": "x64-mingw-dynamic"
             }
+        },
+        {
+            "name": "local-asan",
+            "displayName": "Local ASan+UBSan",
+            "inherits": "asan",
+            "binaryDir": "${sourceDir}/build/ASan",
+            "cacheVariables": {
+                "CMAKE_PREFIX_PATH": "E:/Qt/6.8.3/mingw_64",
+                "CMAKE_CXX_COMPILER": "E:/Qt/Tools/mingw1310_64/bin/g++.exe",
+                "CMAKE_C_COMPILER": "E:/Qt/Tools/mingw1310_64/bin/gcc.exe",
+                "CMAKE_MAKE_PROGRAM": "E:/Qt/Tools/Ninja/ninja.exe",
+                "CMAKE_TOOLCHAIN_FILE": "C:/vcpkgCache/vcpkg/scripts/buildsystems/vcpkg.cmake",
+                "VCPKG_TARGET_TRIPLET": "x64-mingw-dynamic"
+            }
+        }
+    ],
+    "buildPresets": [
+        { "name": "local-debug",   "configurePreset": "local-debug" },
+        { "name": "local-release", "configurePreset": "local-release" },
+        { "name": "local-asan",    "configurePreset": "local-asan" }
+    ],
+    "testPresets": [
+        {
+            "name": "local-debug",
+            "configurePreset": "local-debug",
+            "output": { "outputOnFailure": true }
+        },
+        {
+            "name": "local-asan",
+            "configurePreset": "local-asan",
+            "output": { "outputOnFailure": true }
         }
     ]
 }
