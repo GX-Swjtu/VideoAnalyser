@@ -41,6 +41,11 @@ jobs:
           $mingwBin = Get-ChildItem "$env:IQTA_TOOLS\mingw*\bin" -Directory | Select-Object -First 1
           echo "$mingwBin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
 
+      - name: Configure Git for vcpkg
+        run: |
+          git config --global core.longpaths true
+          git config --global --add safe.directory '*'
+
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
         with:
@@ -138,6 +143,11 @@ jobs:
         run: |
           $mingwBin = Get-ChildItem "$env:IQTA_TOOLS\mingw*\bin" -Directory | Select-Object -First 1
           echo "$mingwBin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
+      - name: Configure Git for vcpkg
+        run: |
+          git config --global core.longpaths true
+          git config --global --add safe.directory '*'
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
