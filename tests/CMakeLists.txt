@@ -87,11 +87,12 @@ add_test(NAME VideoAnalyserTests COMMAND VideoAnalyserTests)
 # 自动复制运行时 DLL 到测试目录，使 ctest 可直接运行（仅动态构建）
 # ============================================
 if(WIN32 AND NOT VA_STATIC_BUILD)
-    # 复制主程序目录下由 windeployqt 部署的 Qt DLL
+    # 仅复制运行时 DLL/插件，避免覆盖 tests/CTestTestfile.cmake 导致 ctest 找不到测试
     add_custom_command(TARGET VideoAnalyserTests POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            "$<TARGET_FILE_DIR:VideoAnalyser>"
-            "$<TARGET_FILE_DIR:VideoAnalyserTests>"
-        COMMENT "Copying runtime DLLs to test directory..."
+        COMMAND ${CMAKE_COMMAND}
+            -DSOURCE_DIR="$<TARGET_FILE_DIR:VideoAnalyser>"
+            -DDEST_DIR="$<TARGET_FILE_DIR:VideoAnalyserTests>"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/copy_test_runtime.cmake"
+        COMMENT "Copying runtime DLLs and Qt plugins to test directory..."
     )
 endif()
