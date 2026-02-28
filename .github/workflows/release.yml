@@ -46,15 +46,6 @@ jobs:
             vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
             vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
 
-      - name: Cache Qt artifacts
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.QT_INSTALL_DIR }}
-          key: qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-6.8-win64_mingw-qtcharts-tools_mingw1310
-          restore-keys: |
-            qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-6.8-
-            qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
-
       - name: Install Qt (MinGW)
         uses: jurplel/install-qt-action@v4
         with:
@@ -65,6 +56,7 @@ jobs:
           arch: 'win64_mingw'
           modules: 'qtcharts'
           tools: 'tools_mingw1310'
+          cache: true
 
       - name: Set up MinGW
         shell: pwsh
@@ -146,15 +138,6 @@ jobs:
             vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
             vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
 
-      - name: Cache Qt artifacts
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.QT_INSTALL_DIR }}
-          key: qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-6.8-win64_msvc2022_64-qtcharts
-          restore-keys: |
-            qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-6.8-
-            qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
-
       - name: Setup MSVC
         uses: ilammy/msvc-dev-cmd@v1
         with:
@@ -169,6 +152,7 @@ jobs:
           target: 'desktop'
           arch: 'win64_msvc2022_64'
           modules: 'qtcharts'
+          cache: true
 
       - name: Ensure vcpkg cache directories
         shell: pwsh
@@ -233,15 +217,6 @@ jobs:
             vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
             vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
 
-      - name: Cache Qt artifacts
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.QT_INSTALL_DIR }}
-          key: qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-6.8-win64_mingw-tools_mingw1310
-          restore-keys: |
-            qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-6.8-
-            qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
-
       - name: Install MinGW
         uses: jurplel/install-qt-action@v4
         with:
@@ -252,6 +227,7 @@ jobs:
           arch: 'win64_mingw'
           tools: 'tools_mingw1310'
           install-deps: false
+          cache: true
 
       - name: Set up MinGW
         shell: pwsh
@@ -405,15 +381,6 @@ jobs:
             vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
             vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
 
-      - name: Cache Qt artifacts
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.QT_INSTALL_DIR }}
-          key: qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-6.8-linux_gcc_64-qtcharts
-          restore-keys: |
-            qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-6.8-
-            qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
-
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
@@ -423,6 +390,7 @@ jobs:
           target: 'desktop'
           arch: 'linux_gcc_64'
           modules: 'qtcharts'
+          cache: true
 
       - name: Install system dependencies
         run: |
@@ -625,15 +593,6 @@ jobs:
             vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
             vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
 
-      - name: Cache Qt artifacts
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.QT_INSTALL_DIR }}
-          key: qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-6.8-qtcharts
-          restore-keys: |
-            qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-6.8-
-            qt-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
-
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
@@ -642,6 +601,7 @@ jobs:
           host: 'mac'
           target: 'desktop'
           modules: 'qtcharts'
+          cache: true
 
       - name: Install system dependencies
         run: brew install nasm
