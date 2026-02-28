@@ -192,6 +192,16 @@ void AboutDialog::setupUI()
     mainLayout->setSpacing(0);
     mainLayout->setContentsMargins(0, 0, 0, 12);
 
+    // ---- 顶部图标区域 ----
+    auto *iconLabel = new QLabel();
+    QPixmap iconPixmap(QStringLiteral(":/icons/app_48"));
+    if (!iconPixmap.isNull()) {
+        iconLabel->setPixmap(iconPixmap.scaled(48, 48, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    }
+    iconLabel->setAlignment(Qt::AlignCenter);
+    iconLabel->setContentsMargins(0, 16, 0, 0);
+    mainLayout->addWidget(iconLabel);
+
     // 使用 QTextBrowser 作为主体内容区域（支持富文本 + 鼠标选中复制）
     auto *browser = new QTextBrowser();
     browser->setOpenExternalLinks(true);
@@ -226,7 +236,7 @@ void AboutDialog::setupUI()
     });
 
     QString html = QStringLiteral(
-        "<div style='text-align: center; padding: 16px 0 4px 0;'>"
+        "<div style='text-align: center; padding: 4px 0 4px 0;'>"
         "  <p style='font-size: 22px; font-weight: bold; margin: 0;'>VideoAnalyser</p>"
         "  <p style='color: gray; margin: 4px 0;'>基于 Qt + FFmpeg 的视频 Packet 分析工具</p>"
         "  <p style='margin: 2px 0;'>作者: gaoxin</p>"

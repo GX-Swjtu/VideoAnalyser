@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- 背景渐变: 深蓝到深灰 -->
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0%" stop-color="#1e3a5f"/>
+      <stop offset="50%" stop-color="#1B2838"/>
+      <stop offset="100%" stop-color="#2D3436"/>
+    </linearGradient>
+
+    <!-- 镜片内部渐变 -->
+    <radialGradient id="lensGrad" cx="0.35" cy="0.35" r="0.7">
+      <stop offset="0%" stop-color="#0f2744"/>
+      <stop offset="100%" stop-color="#091a30"/>
+    </radialGradient>
+
+    <!-- 镜框渐变 -->
+    <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#74B9FF"/>
+      <stop offset="50%" stop-color="#0984E3"/>
+      <stop offset="100%" stop-color="#0652DD"/>
+    </linearGradient>
+
+    <!-- 手柄渐变 -->
+    <linearGradient id="handleGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0984E3"/>
+      <stop offset="100%" stop-color="#0652DD"/>
+    </linearGradient>
+
+    <!-- 波形辉光滤镜 -->
+    <filter id="waveGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feFlood flood-color="#00B894" flood-opacity="0.7" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="colorBlur"/>
+      <feMerge>
+        <feMergeNode in="colorBlur"/>
+        <feMergeNode in="colorBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- 蓝色辉光 -->
+    <filter id="blueGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feFlood flood-color="#0984E3" flood-opacity="0.4" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="colorBlur"/>
+      <feMerge>
+        <feMergeNode in="colorBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- 文字辉光 -->
+    <filter id="textGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- 镜片裁剪区域 -->
+    <clipPath id="lensClip">
+      <circle cx="215" cy="200" r="108"/>
+    </clipPath>
+
+    <!-- 边框辉光 -->
+    <filter id="borderGlow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- 全局圆角裁剪 (与背景矩形完全一致) -->
+    <clipPath id="bgClip">
+      <rect x="16" y="16" width="480" height="480" rx="80" ry="80"/>
+    </clipPath>
+  </defs>
+
+  <!-- ===== 主背景 ===== -->
+  <rect x="16" y="16" width="480" height="480" rx="80" ry="80" fill="url(#bgGrad)"/>
+
+  <!-- 边框辉光 -->
+  <rect x="16" y="16" width="480" height="480" rx="80" ry="80"
+        fill="none" stroke="#0984E3" stroke-width="2" opacity="0.5" filter="url(#borderGlow)"/>
+
+  <!-- ===== 全屏密铺 Hex 背景文字 (数据瀑布, 圆角裁剪) ===== -->
+  <g clip-path="url(#bgClip)">
+  <g font-family="'Cascadia Code','Consolas','SF Mono','Courier New',monospace" font-size="15" fill="#0984E3" font-weight="500" text-anchor="middle">
+    <text x="256" y="36"  opacity="0.16">66 74 79 70 69 73 6F 6D 00 00 02 00 MP4 ISOM AVC1 FREE</text>
+    <text x="256" y="56"  opacity="0.14">00 00 00 1C 66 74 79 70 69 73 6F 6D 00 00 02 00 69 73</text>
+    <text x="256" y="76"  opacity="0.12">6F 32 61 76 63 31 6D 70 34 31 00 00 00 08 66 72 65 65</text>
+    <text x="256" y="96"  opacity="0.11">00 3C 54 15 6D 64 61 74 00 00 04 91 65 88 84 00 4E 7F</text>
+    <text x="256" y="116" opacity="0.10">6D 6F 6F 76 00 00 00 6C 6D 76 68 64 00 00 D6 A4 4B 2C</text>
+    <text x="256" y="136" opacity="0.09">00 00 03 E8 00 01 00 00 01 00 00 00 00 00 00 00 00 01</text>
+    <text x="256" y="156" opacity="0.08">74 72 61 6B 00 00 00 5C 74 6B 68 64 00 03 D6 A4 4B 2C</text>
+    <text x="256" y="176" opacity="0.07">00 00 00 01 00 00 D2 F0 00 00 00 00 00 01 00 00 00 00</text>
+    <text x="256" y="196" opacity="0.07">40 00 00 00 01 40 00 00 00 F0 00 00 00 18 FF FF 00 00</text>
+    <text x="256" y="216" opacity="0.06">65 64 74 73 00 00 00 1C 65 6C 73 74 00 00 00 01 D2 F0</text>
+    <text x="256" y="236" opacity="0.06">6D 64 69 61 00 00 00 20 6D 64 68 64 00 00 D6 A4 4B 2C</text>
+    <text x="256" y="256" opacity="0.05">68 64 6C 72 00 00 00 00 76 69 64 65 6F 48 61 6E 64 6C</text>
+    <text x="256" y="276" opacity="0.05">73 74 62 6C 00 00 00 A1 73 74 73 64 00 00 00 01 91 61</text>
+  </g>
+
+  <!-- 蓝色 Hex 下半区 (渐亮) -->
+  <g font-family="'Cascadia Code','Consolas','SF Mono','Courier New',monospace" font-size="15" fill="#0984E3" font-weight="500" text-anchor="middle">
+    <text x="256" y="296" opacity="0.08">61 76 63 43 01 64 00 1F FF E1 00 18 67 64 00 1F AC D9</text>
+    <text x="256" y="316" opacity="0.12">00 00 03 00 10 C0 F1 62 E4 80 01 00 04 68 EB E3 CB FD</text>
+    <text x="256" y="336" opacity="0.16">NAL: 67 64 00 1F AC D9 40 50 05 BB 01 10 00 03 SPS IDR</text>
+    <text x="256" y="356" opacity="0.20">IDR 65 88 84 00 4E 7F 87 FC C8 47 A5 1E 38 40 80 61 1C</text>
+    <text x="256" y="376" opacity="0.24">SPS: 67 64 00 1F  PPS: 68 EB E3 CB  SEI: 06 05 FF FF 49</text>
+    <text x="256" y="396" opacity="0.28">AUD 09 10 SLICE 41 9A 24 6C 41 FF FE DC BA 98 76 54 32</text>
+    <text x="256" y="416" opacity="0.30">GOP:30 KEY=1 REF=3 QP=24 BIT:4.2M FPS:29.97 SIZE:1920x1080</text>
+    <text x="256" y="436" opacity="0.28">STREAM#0 H.264/AVC  STREAM#1 AAC-LC 44100Hz STEREO  MP4</text>
+    <text x="256" y="456" opacity="0.22">00 04 91 65 88 84 4E 7F 87 FC C8 47 A5 1E FE 30 A4 00</text>
+    <text x="256" y="476" opacity="0.16">SIZE:1920x1080 PIX:YUV420P PROFILE:High LEVEL:3.1 BIT:4.2M</text>
+    <text x="256" y="493" opacity="0.10">C4 CA D0 D6 DC E2 E8 EF F5 FB 00 00 4C 61 76 63 35 38</text>
+  </g>
+
+  <!-- ===== 放大镜 ===== -->
+
+  <!-- 外圈辉光 -->
+  <circle cx="215" cy="200" r="122" fill="none"
+          stroke="#0984E3" stroke-width="1.5" opacity="0.2" filter="url(#blueGlow)"/>
+
+  <!-- 镜片填充 -->
+  <circle cx="215" cy="200" r="108" fill="url(#lensGrad)"/>
+
+  <!-- 镜片内网格线 -->
+  <g clip-path="url(#lensClip)" stroke="#0984E3" stroke-width="0.4" opacity="0.1">
+    <line x1="107" y1="160" x2="323" y2="160"/>
+    <line x1="107" y1="180" x2="323" y2="180"/>
+    <line x1="107" y1="200" x2="323" y2="200"/>
+    <line x1="107" y1="220" x2="323" y2="220"/>
+    <line x1="107" y1="240" x2="323" y2="240"/>
+    <line x1="147" y1="92" x2="147" y2="308"/>
+    <line x1="181" y1="92" x2="181" y2="308"/>
+    <line x1="215" y1="92" x2="215" y2="308"/>
+    <line x1="249" y1="92" x2="249" y2="308"/>
+    <line x1="283" y1="92" x2="283" y2="308"/>
+  </g>
+
+  <!-- ===== 波形 (镜片内裁剪) ===== -->
+  <g clip-path="url(#lensClip)">
+    <!-- 主波形: 视频码率/分析曲线 (青色, 明亮, 粗线条) -->
+    <polyline
+      points="110,210 120,205 128,195 136,215 142,178 150,198
+              158,168 166,205 172,158 180,188 188,148 196,192
+              204,175 212,205 218,165 226,195 234,180 242,210
+              248,172 256,198 264,185 272,212 278,192 286,205
+              294,195 302,210 310,200 318,208 325,202"
+      fill="none" stroke="#00B894" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"
+      filter="url(#waveGlow)"/>
+
+    <!-- 副波形: 音频波形 (浅蓝, 细线条) -->
+    <polyline
+      points="110,225 118,222 126,230 134,218 142,232 150,224
+              158,236 166,220 174,234 182,216 190,230 198,214
+              206,228 214,218 222,232 230,220 238,228 246,216
+              254,232 262,224 270,234 278,220 286,228 294,222
+              302,230 310,226 318,228 325,225"
+      fill="none" stroke="#74B9FF" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+      opacity="0.5"/>
+
+    <!-- 第三层极细波形: 低频分量 -->
+    <polyline
+      points="110,198 135,195 160,192 185,196 210,190 235,194 260,191 285,196 310,193 325,195"
+      fill="none" stroke="#00B894" stroke-width="0.8" stroke-linecap="round"
+      opacity="0.25"/>
+  </g>
+
+  <!-- 镜框环 -->
+  <circle cx="215" cy="200" r="108" fill="none" stroke="url(#ringGrad)" stroke-width="8"/>
+
+  <!-- 镜框高光 (内) -->
+  <circle cx="215" cy="200" r="104" fill="none" stroke="#FFFFFF" stroke-width="0.8" opacity="0.06"/>
+
+  <!-- 镜片左上角高光反射 -->
+  <ellipse cx="175" cy="155" rx="30" ry="15" fill="#FFFFFF" opacity="0.04"
+           transform="rotate(-30, 175, 155)"/>
+
+  <!-- ===== 手柄 ===== -->
+  <!-- 主手柄 -->
+  <line x1="296" y1="282" x2="392" y2="378"
+        stroke="url(#handleGrad)" stroke-width="28" stroke-linecap="round"/>
+
+  <!-- 手柄高光 -->
+  <line x1="300" y1="278" x2="388" y2="366"
+        stroke="#74B9FF" stroke-width="3.5" stroke-linecap="round" opacity="0.25"/>
+
+  <!-- 手柄纹理 -->
+  <line x1="344" y1="325" x2="350" y2="331" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" opacity="0.15"/>
+  <line x1="356" y1="337" x2="362" y2="343" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" opacity="0.12"/>
+  <line x1="368" y1="349" x2="374" y2="355" stroke="#FFFFFF" stroke-width="1.5" stroke-linecap="round" opacity="0.09"/>
+
+  <!-- (底部 Hex 已合并到全屏密铺背景层) -->
+
+  <!-- 底部青色高亮覆盖层 (整体居中, 左侧对齐) -->
+  <g font-family="'Cascadia Code','Consolas','SF Mono','Courier New',monospace" font-size="15" fill="#00B894" font-weight="600" filter="url(#textGlow)" text-anchor="start" transform="translate(68,0)">
+    <text x="0" y="336" opacity="0.28">NAL: 67 64 00 1F AC D9 40 50  SPS</text>
+    <text x="0" y="356" opacity="0.25">IDR  65 88 84 00 4E 7F 87 FC  C8</text>
+    <text x="0" y="376" opacity="0.25">SPS: 67 64 00 1F  PPS: 68 EB E3</text>
+    <text x="0" y="396" opacity="0.30">AUD  09 10  SLICE 41 9A 24 6C 41</text>
+    <text x="0" y="416" opacity="0.40">GOP:30  KEY=1  BIT:4.2M  FPS:29.97</text>
+    <text x="0" y="436" opacity="0.30">STREAM#0 H.264  #1 AAC 44100Hz</text>
+    <text x="0" y="456" opacity="0.22">00 04 91 65 88 84 4E 7F 87 FC C8</text>
+    <text x="0" y="476" opacity="0.18">SIZE:1920x1080  PROFILE:High  L3.1</text>
+    <text x="0" y="493" opacity="0.12">DURATION:00:05:23  CONTAINER:MP4</text>
+  </g>
+  </g> <!-- /bgClip -->
+
+  <!-- ===== 装饰粒子 ===== -->
+  <circle cx="422" cy="110" r="2.5" fill="#00B894" opacity="0.45"/>
+  <circle cx="445" cy="135" r="1.8" fill="#0984E3" opacity="0.35"/>
+  <circle cx="460" cy="100" r="1.2" fill="#74B9FF" opacity="0.4"/>
+  <circle cx="85" cy="310" r="2" fill="#00B894" opacity="0.3"/>
+  <circle cx="68" cy="330" r="1.2" fill="#0984E3" opacity="0.25"/>
+  <circle cx="440" cy="300" r="1.5" fill="#00B894" opacity="0.2"/>
+  <circle cx="455" cy="280" r="1" fill="#74B9FF" opacity="0.3"/>
+
+  <!-- 角落装饰线 -->
+  <line x1="430" y1="56" x2="460" y2="56" stroke="#0984E3" stroke-width="1" opacity="0.15"/>
+  <line x1="460" y1="56" x2="460" y2="86" stroke="#0984E3" stroke-width="1" opacity="0.15"/>
+</svg>

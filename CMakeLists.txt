@@ -115,11 +115,21 @@ file(GLOB_RECURSE SOURCES ${SRC_DIR}/*.cpp ${SRC_DIR}/*.c)
 file(GLOB_RECURSE HEADERS ${INCLUDE_DIR}/*.h ${INCLUDE_DIR}/*.hpp)
 file(GLOB_RECURSE UI_FILES ${UI_DIR}/*.ui)
 
+# Qt 资源文件（图标等）
+set(QRC_FILES ${CMAKE_SOURCE_DIR}/assets/resources.qrc)
+
+# Windows 可执行文件图标
+if(WIN32)
+    set(WIN_RC_FILE ${CMAKE_SOURCE_DIR}/assets/app.rc)
+endif()
+
 set(PROJECT_SOURCES
         ${SOURCES}
         ${HEADERS}
         ${UI_FILES}
         ${TS_FILES}
+        ${QRC_FILES}
+        ${WIN_RC_FILE}
 )
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
