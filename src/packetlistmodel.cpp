@@ -125,7 +125,7 @@ QVariant PacketListModel::data(const QModelIndex &index, int role) const
         case ColType:     return static_cast<int>(pkt.mediaType);
         case ColIndex:    return pkt.index;
         case ColStream:   return pkt.streamIndex;
-        case ColOffset:   return pkt.pos;
+        case ColOffset:   return static_cast<qlonglong>(pkt.pos);
         case ColSize:     return pkt.size;
         case ColFlags:    return pkt.flags;
         case ColCodec:    return pkt.codecName;
