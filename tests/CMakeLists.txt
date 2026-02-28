@@ -2,6 +2,15 @@ enable_testing()
 find_package(GTest REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Concurrent Charts)
 find_package(FFMPEG REQUIRED)
+# Qt 自带的 FindFFmpeg 可能不包含 swscale/swresample，显式补充
+find_library(SWSCALE_LIBRARY NAMES swscale HINTS ${FFMPEG_LIBRARY_DIRS})
+find_library(SWRESAMPLE_LIBRARY NAMES swresample HINTS ${FFMPEG_LIBRARY_DIRS})
+if(SWSCALE_LIBRARY)
+    list(APPEND FFMPEG_LIBRARIES ${SWSCALE_LIBRARY})
+endif()
+if(SWRESAMPLE_LIBRARY)
+    list(APPEND FFMPEG_LIBRARIES ${SWRESAMPLE_LIBRARY})
+endif()
 
 # 将业务逻辑编译为静态库供测试链接（排除 main.cpp）
 file(GLOB_RECURSE LIB_SOURCES ${CMAKE_SOURCE_DIR}/src/*.cpp)
@@ -19,8 +28,6 @@ target_link_libraries(VideoAnalyserLib PUBLIC
     Qt${QT_VERSION_MAJOR}::Concurrent
     Qt${QT_VERSION_MAJOR}::Charts
     ${FFMPEG_LIBRARIES}
-    -lswscale
-    -lswresample
 )
 set_target_properties(VideoAnalyserLib PROPERTIES
     AUTOMOC ON

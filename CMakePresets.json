@@ -12,7 +12,8 @@
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build/${presetName}",
             "cacheVariables": {
-                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
             }
         },
         {
@@ -40,22 +41,110 @@
                 "VA_ENABLE_SANITIZERS": "ON",
                 "VA_SANITIZERS": "address,undefined"
             }
+        },
+        {
+            "name": "windows-debug",
+            "displayName": "Windows Debug (MinGW)",
+            "description": "Windows MinGW Debug 构建。需设置环境变量 VCPKG_ROOT 和 CMAKE_PREFIX_PATH（Qt 安装路径）",
+            "inherits": "debug",
+            "cacheVariables": {
+                "VCPKG_TARGET_TRIPLET": "x64-mingw-dynamic"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "windows-release",
+            "displayName": "Windows Release (MinGW)",
+            "description": "Windows MinGW Release 构建",
+            "inherits": "release",
+            "cacheVariables": {
+                "VCPKG_TARGET_TRIPLET": "x64-mingw-dynamic"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "windows-asan",
+            "displayName": "Windows ASan+UBSan (MinGW)",
+            "description": "Windows MinGW Debug + AddressSanitizer 构建",
+            "inherits": "asan",
+            "cacheVariables": {
+                "VCPKG_TARGET_TRIPLET": "x64-mingw-dynamic"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "linux-debug",
+            "displayName": "Linux Debug",
+            "description": "Linux GCC/Clang Debug 构建。需设置环境变量 VCPKG_ROOT",
+            "inherits": "debug",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            }
+        },
+        {
+            "name": "linux-release",
+            "displayName": "Linux Release",
+            "description": "Linux GCC/Clang Release 构建",
+            "inherits": "release",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            }
+        },
+        {
+            "name": "linux-asan",
+            "displayName": "Linux ASan+UBSan",
+            "description": "Linux Debug + AddressSanitizer 构建",
+            "inherits": "asan",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            }
         }
     ],
     "buildPresets": [
-        { "name": "debug",   "configurePreset": "debug" },
-        { "name": "release", "configurePreset": "release" },
-        { "name": "asan",    "configurePreset": "asan" }
+        { "name": "windows-debug",   "configurePreset": "windows-debug" },
+        { "name": "windows-release", "configurePreset": "windows-release" },
+        { "name": "windows-asan",    "configurePreset": "windows-asan" },
+        { "name": "linux-debug",     "configurePreset": "linux-debug" },
+        { "name": "linux-release",   "configurePreset": "linux-release" },
+        { "name": "linux-asan",      "configurePreset": "linux-asan" }
     ],
     "testPresets": [
         {
-            "name": "debug",
-            "configurePreset": "debug",
+            "name": "windows-debug",
+            "configurePreset": "windows-debug",
             "output": { "outputOnFailure": true }
         },
         {
-            "name": "asan",
-            "configurePreset": "asan",
+            "name": "windows-asan",
+            "configurePreset": "windows-asan",
+            "output": { "outputOnFailure": true }
+        },
+        {
+            "name": "linux-debug",
+            "configurePreset": "linux-debug",
+            "output": { "outputOnFailure": true }
+        },
+        {
+            "name": "linux-asan",
+            "configurePreset": "linux-asan",
             "output": { "outputOnFailure": true }
         }
     ]

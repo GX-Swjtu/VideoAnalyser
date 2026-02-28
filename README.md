@@ -1,5 +1,7 @@
 # VideoAnalyser
 
+[![CI](https://github.com/<your-username>/VideoAnalyser/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-username>/VideoAnalyser/actions/workflows/ci.yml)
+
 基于 **Qt 6 + FFmpeg** 的通用视频 Packet 分析工具。打开任意格式的视频文件，遍历所有 AVPacket 并以表格形式展示，双击可查看 Packet 详情（元数据、Hex 原始数据、解码内容）。
 
 ## 功能特性
@@ -20,23 +22,13 @@
 - **拖放打开** — 支持拖放文件到窗口直接打开
 - **内存友好** — 只存元数据，原始数据和解码均按需从文件读取
 
-## 项目体检（2026-02-28）
-
-- **测试与构建状态**：当前 `CMake: build` 和 `ctest` 通过（`VideoAnalyserTests`）。
-- **逻辑问题（已修复）**：
-   - 重新打开文件时，旧的 `PacketDetailWidget` 可能仍在后台解码并访问已重置的 `PacketReader`，存在并发/生命周期风险；现已在加载新文件前主动关闭旧详情窗口。
-   - `loadFile()` 每次调用都会新增一次 `progressChanged` 连接，可能导致重复更新；现改为复用单连接并在重连前断开旧连接。
-   - `PacketReader::open()` 中 `codecpar` 分配/拷贝未做失败处理；现已补齐错误路径并确保失败时释放资源。
-- **资源泄漏检查结论**：核心 FFmpeg 对象（`AVPacket`/`AVFrame`/`AVCodecContext`/`SwsContext`/`SwrContext`）在主路径和错误路径均有对应释放，未发现确定性的内存/句柄泄漏。
-- **当前已知限制**：尚未接入 AddressSanitizer/LeakSanitizer 等运行时泄漏检测，建议在 CI 增加一组带 Sanitizer 的构建配置用于长期回归。
-
 ## 环境要求
 
 | 依赖 | 最低版本 | 说明 |
 |------|---------|------|
 | **CMake** | 3.16+ | 构建系统 |
 | **Ninja** | — | 构建后端（推荐） |
-| **Qt** | 6.x (推荐 6.8+) | UI 框架，需要 Widgets、Charts 和 LinguistTools 模块 |
+| **Qt** | 6.x (推荐 6.8+) | UI 框架，需要 Widgets、Charts、Concurrent 和 LinguistTools 模块 |
 | **FFmpeg** | 6.x+ | 音视频解封装和解码 |
 | **vcpkg** | — | C++ 包管理器，管理 FFmpeg 和 GTest 依赖 |
 | **C++ 编译器** | C++17 | MinGW 13+ / GCC 9+ / MSVC 2019+ |
@@ -50,7 +42,7 @@ git clone https://github.com/<your-username>/VideoAnalyser.git
 cd VideoAnalyser
 ```
 
-### 2. 安装依赖
+### 2. 安装前置工具
 
 #### 安装 vcpkg（如尚未安装）
 
@@ -58,73 +50,90 @@ cd VideoAnalyser
 # Windows (PowerShell)
 git clone https://github.com/microsoft/vcpkg.git C:\vcpkg
 C:\vcpkg\bootstrap-vcpkg.bat
+# 设置环境变量（添加到系统环境变量或 PowerShell $PROFILE）
+$env:VCPKG_ROOT = "C:\vcpkg"
 
 # Linux
 git clone https://github.com/microsoft/vcpkg.git ~/vcpkg
 ~/vcpkg/bootstrap-vcpkg.sh
+export VCPKG_ROOT="$HOME/vcpkg"  # 添加到 ~/.bashrc 或 ~/.zshrc
 ```
 
-vcpkg 会在首次 CMake 配置时自动安装 `vcpkg.json` 中声明的依赖（FFmpeg、GTest）。
+vcpkg 会在首次 CMake 配置时自动安装 `vcpkg.json` 中声明的依赖（FFmpeg、GTest）。FFmpeg 首次编译耗时较长（10–30 分钟），后续会使用缓存。
 
 #### 安装 Qt 6
 
-从 [Qt 官网](https://www.qt.io/download) 下载安装 Qt 6，选择与你编译器匹配的版本（如 MinGW 64-bit）。
+从 [Qt 官网](https://www.qt.io/download) 下载安装 Qt 6，选择与你编译器匹配的版本（如 MinGW 64-bit）。安装时勾选 **Qt Charts** 附加模块。
 
-### 3. 配置本地路径
+### 3. 构建项目
 
 项目提供了 **两种构建方式**，选择任意一种即可：
 
 ---
 
-#### 方式 A：CMake Presets（推荐，适合 IDE 和命令行）
+#### 方式 A：环境变量 + CMake Presets（推荐）
+
+设置好环境变量后，CMakePresets.json 中的公开 preset 可直接使用，无需创建额外文件。
+
+**Windows (MinGW)：**
+
+```powershell
+# 确保环境变量已设置（或在当前终端中临时设置）
+$env:VCPKG_ROOT = "C:\vcpkg"
+$env:CMAKE_PREFIX_PATH = "C:\Qt\6.8.3\mingw_64"   # 你的 Qt 安装路径
+
+# 配置、构建、测试
+cmake --preset windows-debug
+cmake --build --preset windows-debug
+ctest --preset windows-debug
+```
+
+**Linux：**
+
+```bash
+export VCPKG_ROOT="$HOME/vcpkg"
+export CMAKE_PREFIX_PATH="$HOME/Qt/6.8.3/gcc_64"   # 你的 Qt 安装路径
+
+cmake --preset linux-debug
+cmake --build --preset linux-debug
+ctest --preset linux-debug
+```
+
+> 💡 **小贴士**：将 `VCPKG_ROOT` 和 `CMAKE_PREFIX_PATH` 添加到系统环境变量中，以后就不必每次手动设置。
+
+---
+
+#### 方式 B：CMakeUserPresets（适合需要指定编译器路径的用户）
+
+如果你的编译器/Ninja 不在 PATH 中，或者需要锁定特定路径，可以使用 CMakeUserPresets：
 
 1. 复制示例文件：
    ```bash
    cp CMakeUserPresets.json.example CMakeUserPresets.json
    ```
 
-2. 编辑 `CMakeUserPresets.json`，将路径改为你本地的实际路径：
-   ```json
-   {
-       "version": 6,
-       "configurePresets": [
-           {
-               "name": "windows-mingw-debug",
-               "inherits": "windows-mingw-debug",
-               "cacheVariables": {
-                   "CMAKE_PREFIX_PATH": "你的Qt路径/6.8.3/mingw_64",
-                   "CMAKE_CXX_COMPILER": "你的MinGW路径/bin/g++.exe",
-                   "CMAKE_C_COMPILER": "你的MinGW路径/bin/gcc.exe",
-                   "CMAKE_TOOLCHAIN_FILE": "你的vcpkg路径/scripts/buildsystems/vcpkg.cmake",
-                   "VCPKG_TARGET_TRIPLET": "x64-mingw-dynamic"
-               }
-           }
-       ]
-   }
-   ```
+2. 编辑 `CMakeUserPresets.json`，将 `<占位符>` 替换为你本机的实际路径。
 
 3. 构建：
    ```bash
-   cmake --preset windows-mingw-debug
-   cmake --build --preset windows-mingw-debug
+   cmake --preset local-debug
+   cmake --build --preset local-debug
+   ctest --preset local-debug
    ```
 
-> **VS Code 用户**：安装 CMake Tools 扩展后，会自动识别 Presets，在状态栏选择对应 Preset 即可一键构建。
+> **VS Code 用户**：安装 [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools) 扩展后，会自动识别 Presets，在状态栏选择对应 Preset 即可一键构建。
 
-### 4. Linux 构建
+### 4. Linux 额外说明
 
 ```bash
-# 安装系统依赖（Ubuntu/Debian）
-sudo apt install qt6-base-dev qt6-tools-dev cmake ninja-build
+# 安装系统依赖（Ubuntu/Debian 24.04+）
+sudo apt install cmake ninja-build pkg-config \
+  qt6-base-dev qt6-charts-dev qt6-tools-dev qt6-l10n-tools \
+  libgl1-mesa-dev libxkbcommon-dev
 
-# 如果使用 vcpkg 管理 FFmpeg
-cmake --preset linux-debug
-cmake --build --preset linux-debug
-
-# 或者使用系统包管理器安装 FFmpeg
-sudo apt install libavcodec-dev libavformat-dev libavutil-dev libswscale-dev libswresample-dev libavdevice-dev libavfilter-dev
-cmake --preset linux-debug
-cmake --build --preset linux-debug
+# 如果不使用 vcpkg 管理 FFmpeg，也可使用系统包
+sudo apt install libavcodec-dev libavformat-dev libavutil-dev \
+  libswscale-dev libswresample-dev libavdevice-dev libavfilter-dev
 ```
 
 ## 项目结构
@@ -188,10 +197,32 @@ cmake --build --preset linux-debug
 ## 运行测试
 
 ```bash
-cmake --preset windows-mingw-debug
-cmake --build --preset windows-mingw-debug
-ctest --preset windows-mingw-debug
+# Windows
+cmake --preset windows-debug
+cmake --build --preset windows-debug
+ctest --preset windows-debug
+
+# Linux
+cmake --preset linux-debug
+cmake --build --preset linux-debug
+ctest --preset linux-debug
+
+# 使用 CMakeUserPresets 的用户
+ctest --preset local-debug
 ```
+
+## 可用的 CMake Presets
+
+| Preset | 平台 | 说明 |
+|--------|------|------|
+| `windows-debug` | Windows | MinGW Debug 构建 |
+| `windows-release` | Windows | MinGW Release 构建 |
+| `windows-asan` | Windows | MinGW Debug + AddressSanitizer |
+| `linux-debug` | Linux | GCC/Clang Debug 构建 |
+| `linux-release` | Linux | GCC/Clang Release 构建 |
+| `linux-asan` | Linux | GCC/Clang Debug + AddressSanitizer |
+
+> 以上 preset 通过 `$env{VCPKG_ROOT}` 环境变量定位 vcpkg。如需覆盖编译器等路径，创建 `CMakeUserPresets.json`（参见 `CMakeUserPresets.json.example`）。
 
 ## 技术栈
 

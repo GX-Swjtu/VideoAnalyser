@@ -26,6 +26,16 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets LinguistTools Con
 
 # FFmpeg
 find_package(FFMPEG REQUIRED)
+# Qt 自带的 FindFFmpeg 模块可能不将 swscale/swresample 包含在 FFMPEG_LIBRARIES 中
+# 显式查找以确保它们始终可用
+find_library(SWSCALE_LIBRARY NAMES swscale HINTS ${FFMPEG_LIBRARY_DIRS})
+find_library(SWRESAMPLE_LIBRARY NAMES swresample HINTS ${FFMPEG_LIBRARY_DIRS})
+if(SWSCALE_LIBRARY)
+    list(APPEND FFMPEG_LIBRARIES ${SWSCALE_LIBRARY})
+endif()
+if(SWRESAMPLE_LIBRARY)
+    list(APPEND FFMPEG_LIBRARIES ${SWRESAMPLE_LIBRARY})
+endif()
 
 if(VA_ENABLE_SANITIZERS)
     add_library(VideoAnalyserSanitizers INTERFACE)
@@ -92,7 +102,7 @@ endif()
 
 target_include_directories(VideoAnalyser PRIVATE ${INCLUDE_DIR} ${FFMPEG_INCLUDE_DIRS})
 target_link_directories(VideoAnalyser PRIVATE ${FFMPEG_LIBRARY_DIRS})
-target_link_libraries(VideoAnalyser PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Concurrent Qt${QT_VERSION_MAJOR}::Charts ${FFMPEG_LIBRARIES} -lswscale -lswresample)
+target_link_libraries(VideoAnalyser PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Concurrent Qt${QT_VERSION_MAJOR}::Charts ${FFMPEG_LIBRARIES})
 if(TARGET VideoAnalyserSanitizers)
     target_link_libraries(VideoAnalyser PRIVATE VideoAnalyserSanitizers)
 endif()

@@ -1,46 +1,48 @@
 {
     "version": 6,
+    "$comment": "将此文件复制为 CMakeUserPresets.json，然后将下面的路径替换为你本机的实际路径。该文件已被 .gitignore 忽略，不会提交到仓库。",
     "configurePresets": [
         {
             "name": "local-debug",
             "displayName": "Local Debug",
-            "inherits": "debug",
+            "inherits": "windows-debug",
             "binaryDir": "${sourceDir}/build/Debug",
             "cacheVariables": {
-                "CMAKE_PREFIX_PATH": "E:/Qt/6.8.3/mingw_64",
-                "CMAKE_CXX_COMPILER": "E:/Qt/Tools/mingw1310_64/bin/g++.exe",
-                "CMAKE_C_COMPILER": "E:/Qt/Tools/mingw1310_64/bin/gcc.exe",
-                "CMAKE_MAKE_PROGRAM": "E:/Qt/Tools/Ninja/ninja.exe",
-                "CMAKE_TOOLCHAIN_FILE": "C:/vcpkgCache/vcpkg/scripts/buildsystems/vcpkg.cmake",
-                "VCPKG_TARGET_TRIPLET": "x64-mingw-dynamic"
+                "$comment-CMAKE_PREFIX_PATH": "Qt 安装路径，例如 C:/Qt/6.8.3/mingw_64",
+                "CMAKE_PREFIX_PATH": "<你的Qt路径>/6.x.x/mingw_64",
+                "$comment-CMAKE_CXX_COMPILER": "MinGW g++ 路径",
+                "CMAKE_CXX_COMPILER": "<你的MinGW路径>/bin/g++.exe",
+                "CMAKE_C_COMPILER": "<你的MinGW路径>/bin/gcc.exe",
+                "$comment-CMAKE_MAKE_PROGRAM": "Ninja 路径（如果不在 PATH 中需指定）",
+                "CMAKE_MAKE_PROGRAM": "<你的Ninja路径>/ninja.exe",
+                "$comment-CMAKE_TOOLCHAIN_FILE": "vcpkg 工具链路径",
+                "CMAKE_TOOLCHAIN_FILE": "<你的vcpkg路径>/scripts/buildsystems/vcpkg.cmake"
             }
         },
         {
             "name": "local-release",
             "displayName": "Local Release",
-            "inherits": "release",
+            "inherits": "windows-release",
             "binaryDir": "${sourceDir}/build/Release",
             "cacheVariables": {
-                "CMAKE_PREFIX_PATH": "E:/Qt/6.8.3/mingw_64",
-                "CMAKE_CXX_COMPILER": "E:/Qt/Tools/mingw1310_64/bin/g++.exe",
-                "CMAKE_C_COMPILER": "E:/Qt/Tools/mingw1310_64/bin/gcc.exe",
-                "CMAKE_MAKE_PROGRAM": "E:/Qt/Tools/Ninja/ninja.exe",
-                "CMAKE_TOOLCHAIN_FILE": "C:/vcpkgCache/vcpkg/scripts/buildsystems/vcpkg.cmake",
-                "VCPKG_TARGET_TRIPLET": "x64-mingw-dynamic"
+                "CMAKE_PREFIX_PATH": "<你的Qt路径>/6.x.x/mingw_64",
+                "CMAKE_CXX_COMPILER": "<你的MinGW路径>/bin/g++.exe",
+                "CMAKE_C_COMPILER": "<你的MinGW路径>/bin/gcc.exe",
+                "CMAKE_MAKE_PROGRAM": "<你的Ninja路径>/ninja.exe",
+                "CMAKE_TOOLCHAIN_FILE": "<你的vcpkg路径>/scripts/buildsystems/vcpkg.cmake"
             }
         },
         {
             "name": "local-asan",
             "displayName": "Local ASan+UBSan",
-            "inherits": "asan",
+            "inherits": "windows-asan",
             "binaryDir": "${sourceDir}/build/ASan",
             "cacheVariables": {
-                "CMAKE_PREFIX_PATH": "E:/Qt/6.8.3/mingw_64",
-                "CMAKE_CXX_COMPILER": "E:/Qt/Tools/mingw1310_64/bin/g++.exe",
-                "CMAKE_C_COMPILER": "E:/Qt/Tools/mingw1310_64/bin/gcc.exe",
-                "CMAKE_MAKE_PROGRAM": "E:/Qt/Tools/Ninja/ninja.exe",
-                "CMAKE_TOOLCHAIN_FILE": "C:/vcpkgCache/vcpkg/scripts/buildsystems/vcpkg.cmake",
-                "VCPKG_TARGET_TRIPLET": "x64-mingw-dynamic"
+                "CMAKE_PREFIX_PATH": "<你的Qt路径>/6.x.x/mingw_64",
+                "CMAKE_CXX_COMPILER": "<你的MinGW路径>/bin/g++.exe",
+                "CMAKE_C_COMPILER": "<你的MinGW路径>/bin/gcc.exe",
+                "CMAKE_MAKE_PROGRAM": "<你的Ninja路径>/ninja.exe",
+                "CMAKE_TOOLCHAIN_FILE": "<你的vcpkg路径>/scripts/buildsystems/vcpkg.cmake"
             }
         }
     ],
