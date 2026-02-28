@@ -1,15 +1,30 @@
 enable_testing()
 find_package(GTest REQUIRED)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Concurrent Charts)
-find_package(FFMPEG REQUIRED)
-# Qt 自带的 FindFFmpeg 可能不包含 swscale/swresample，显式补充
-find_library(SWSCALE_LIBRARY NAMES swscale HINTS ${FFMPEG_LIBRARY_DIRS})
-find_library(SWRESAMPLE_LIBRARY NAMES swresample HINTS ${FFMPEG_LIBRARY_DIRS})
-if(SWSCALE_LIBRARY)
-    list(APPEND FFMPEG_LIBRARIES ${SWSCALE_LIBRARY})
-endif()
-if(SWRESAMPLE_LIBRARY)
-    list(APPEND FFMPEG_LIBRARIES ${SWRESAMPLE_LIBRARY})
+
+# FFmpeg
+if(VA_STATIC_BUILD)
+    # 静态构建：使用 PkgConfig 解析 FFmpeg 的全部传递依赖
+    find_package(PkgConfig REQUIRED)
+    if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+        set(ENV{PKG_CONFIG_PATH} "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/pkgconfig")
+    endif()
+    pkg_check_modules(FFMPEG_PC REQUIRED
+        libavdevice libavfilter libavformat libavcodec libswresample libswscale libavutil)
+    set(FFMPEG_INCLUDE_DIRS ${FFMPEG_PC_INCLUDE_DIRS})
+    set(FFMPEG_LIBRARY_DIRS ${FFMPEG_PC_STATIC_LIBRARY_DIRS})
+    set(FFMPEG_LIBRARIES    ${FFMPEG_PC_STATIC_LIBRARIES})
+else()
+    find_package(FFMPEG REQUIRED)
+    # Qt 自带的 FindFFmpeg 可能不包含 swscale/swresample，显式补充
+    find_library(SWSCALE_LIBRARY NAMES swscale HINTS ${FFMPEG_LIBRARY_DIRS})
+    find_library(SWRESAMPLE_LIBRARY NAMES swresample HINTS ${FFMPEG_LIBRARY_DIRS})
+    if(SWSCALE_LIBRARY)
+        list(APPEND FFMPEG_LIBRARIES ${SWSCALE_LIBRARY})
+    endif()
+    if(SWRESAMPLE_LIBRARY)
+        list(APPEND FFMPEG_LIBRARIES ${SWRESAMPLE_LIBRARY})
+    endif()
 endif()
 
 # 将业务逻辑编译为静态库供测试链接（排除 main.cpp）
@@ -54,6 +69,10 @@ set_target_properties(VideoAnalyserTests PROPERTIES AUTOMOC ON)
 if(TARGET VideoAnalyserSanitizers)
     target_link_libraries(VideoAnalyserTests PRIVATE VideoAnalyserSanitizers)
 endif()
+# 全静态链接：添加 MinGW 运行时静态链接标志
+if(VA_STATIC_BUILD AND MINGW)
+    target_link_options(VideoAnalyserTests PRIVATE -static)
+endif()
 
 # 测试数据路径
 target_compile_definitions(VideoAnalyserTests PRIVATE
@@ -63,9 +82,9 @@ target_compile_definitions(VideoAnalyserTests PRIVATE
 add_test(NAME VideoAnalyserTests COMMAND VideoAnalyserTests)
 
 # ============================================
-# 自动复制运行时 DLL 到测试目录，使 ctest 可直接运行
+# 自动复制运行时 DLL 到测试目录，使 ctest 可直接运行（仅动态构建）
 # ============================================
-if(WIN32)
+if(WIN32 AND NOT VA_STATIC_BUILD)
     # 复制主程序目录下由 windeployqt 部署的 Qt DLL
     add_custom_command(TARGET VideoAnalyserTests POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory

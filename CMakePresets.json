@@ -43,6 +43,17 @@
             }
         },
         {
+            "name": "static",
+            "hidden": true,
+            "description": "全静态链接构建，生成单文件绿色版（Qt 通过 vcpkg 安装）",
+            "inherits": "release",
+            "cacheVariables": {
+                "VA_STATIC_BUILD": "ON",
+                "VCPKG_MANIFEST_FEATURES": "static-qt",
+                "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/triplets"
+            }
+        },
+        {
             "name": "windows-debug",
             "displayName": "Windows Debug (MinGW)",
             "description": "Windows MinGW Debug 构建。需设置环境变量 VCPKG_ROOT 和 CMAKE_PREFIX_PATH（Qt 安装路径）",
@@ -77,6 +88,20 @@
             "inherits": "asan",
             "cacheVariables": {
                 "VCPKG_TARGET_TRIPLET": "x64-mingw-dynamic"
+            },
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "windows-static",
+            "displayName": "Windows Static (MinGW)",
+            "description": "Windows MinGW 全静态构建，生成单文件绿色版",
+            "inherits": "static",
+            "cacheVariables": {
+                "VCPKG_TARGET_TRIPLET": "x64-mingw-static"
             },
             "condition": {
                 "type": "equals",
@@ -122,6 +147,7 @@
         { "name": "windows-debug",   "configurePreset": "windows-debug" },
         { "name": "windows-release", "configurePreset": "windows-release" },
         { "name": "windows-asan",    "configurePreset": "windows-asan" },
+        { "name": "windows-static",  "configurePreset": "windows-static" },
         { "name": "linux-debug",     "configurePreset": "linux-debug" },
         { "name": "linux-release",   "configurePreset": "linux-release" },
         { "name": "linux-asan",      "configurePreset": "linux-asan" }

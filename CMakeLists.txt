@@ -11,6 +11,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(VA_ENABLE_SANITIZERS "Enable compiler sanitizers" OFF)
 set(VA_SANITIZERS "address,undefined" CACHE STRING "Comma-separated sanitizers, e.g. address,undefined")
+option(VA_STATIC_BUILD "全静态链接，生成单文件可执行程序（绿色版）" OFF)
 
 # 设置目录变量
 set(SRC_DIR ${CMAKE_SOURCE_DIR}/src)
@@ -25,16 +26,29 @@ find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets LinguistTools Concurre
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets LinguistTools Concurrent Charts)
 
 # FFmpeg
-find_package(FFMPEG REQUIRED)
-# Qt 自带的 FindFFmpeg 模块可能不将 swscale/swresample 包含在 FFMPEG_LIBRARIES 中
-# 显式查找以确保它们始终可用
-find_library(SWSCALE_LIBRARY NAMES swscale HINTS ${FFMPEG_LIBRARY_DIRS})
-find_library(SWRESAMPLE_LIBRARY NAMES swresample HINTS ${FFMPEG_LIBRARY_DIRS})
-if(SWSCALE_LIBRARY)
-    list(APPEND FFMPEG_LIBRARIES ${SWSCALE_LIBRARY})
-endif()
-if(SWRESAMPLE_LIBRARY)
-    list(APPEND FFMPEG_LIBRARIES ${SWRESAMPLE_LIBRARY})
+if(VA_STATIC_BUILD)
+    # 静态构建：使用 PkgConfig 解析 FFmpeg 的全部传递依赖（系统库、zlib 等）
+    find_package(PkgConfig REQUIRED)
+    if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+        set(ENV{PKG_CONFIG_PATH} "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib/pkgconfig")
+    endif()
+    pkg_check_modules(FFMPEG_PC REQUIRED
+        libavdevice libavfilter libavformat libavcodec libswresample libswscale libavutil)
+    set(FFMPEG_INCLUDE_DIRS ${FFMPEG_PC_INCLUDE_DIRS})
+    set(FFMPEG_LIBRARY_DIRS ${FFMPEG_PC_STATIC_LIBRARY_DIRS})
+    set(FFMPEG_LIBRARIES    ${FFMPEG_PC_STATIC_LIBRARIES})
+else()
+    find_package(FFMPEG REQUIRED)
+    # Qt 自带的 FindFFmpeg 模块可能不将 swscale/swresample 包含在 FFMPEG_LIBRARIES 中
+    # 显式查找以确保它们始终可用
+    find_library(SWSCALE_LIBRARY NAMES swscale HINTS ${FFMPEG_LIBRARY_DIRS})
+    find_library(SWRESAMPLE_LIBRARY NAMES swresample HINTS ${FFMPEG_LIBRARY_DIRS})
+    if(SWSCALE_LIBRARY)
+        list(APPEND FFMPEG_LIBRARIES ${SWSCALE_LIBRARY})
+    endif()
+    if(SWRESAMPLE_LIBRARY)
+        list(APPEND FFMPEG_LIBRARIES ${SWRESAMPLE_LIBRARY})
+    endif()
 endif()
 
 if(VA_ENABLE_SANITIZERS)
@@ -107,6 +121,11 @@ if(TARGET VideoAnalyserSanitizers)
     target_link_libraries(VideoAnalyser PRIVATE VideoAnalyserSanitizers)
 endif()
 
+# 全静态链接：添加 MinGW 运行时静态链接标志
+if(VA_STATIC_BUILD AND MINGW)
+    target_link_options(VideoAnalyser PRIVATE -static)
+endif()
+
 # 平台相关的目标属性
 if(${QT_VERSION} VERSION_LESS 6.1.0)
   set(BUNDLE_ID_OPTION MACOSX_BUNDLE_GUI_IDENTIFIER com.example.VideoAnalyser)
@@ -138,9 +157,9 @@ enable_testing()
 add_subdirectory(tests)
 
 # ============================================
-# 平台相关的构建后部署
+# 平台相关的构建后部署（仅动态构建）
 # ============================================
-if(WIN32)
+if(WIN32 AND NOT VA_STATIC_BUILD)
     # Windows: 使用 windeployqt 复制 Qt DLL
     find_program(QT_DEPLOY_TOOL windeployqt HINTS "${Qt6_DIR}/../../../bin")
     if(QT_DEPLOY_TOOL)
@@ -160,7 +179,7 @@ if(WIN32)
             )
         endforeach()
     endif()
-elseif(UNIX AND NOT APPLE)
+elseif(UNIX AND NOT APPLE AND NOT VA_STATIC_BUILD)
     # Linux: 设置 RPATH，使可执行文件能找到相对路径的共享库
     set_target_properties(VideoAnalyser PROPERTIES
         INSTALL_RPATH "$ORIGIN/../lib;$ORIGIN"

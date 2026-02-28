@@ -44,12 +44,30 @@
                 "CMAKE_MAKE_PROGRAM": "<你的Ninja路径>/ninja.exe",
                 "CMAKE_TOOLCHAIN_FILE": "<你的vcpkg路径>/scripts/buildsystems/vcpkg.cmake"
             }
+        },
+        {
+            "name": "local-static",
+            "displayName": "Local Static (Green)",
+            "description": "全静态构建，生成单文件绿色版。Qt 通过 vcpkg 自动安装，无需设置 CMAKE_PREFIX_PATH",
+            "inherits": "windows-static",
+            "binaryDir": "${sourceDir}/build/Static",
+            "environment": {
+                "$comment": "vcpkg 编译器检测需要 MinGW 在 PATH 中",
+                "PATH": "<你的MinGW路径>/bin;$penv{PATH}"
+            },
+            "cacheVariables": {
+                "CMAKE_CXX_COMPILER": "<你的MinGW路径>/bin/g++.exe",
+                "CMAKE_C_COMPILER": "<你的MinGW路径>/bin/gcc.exe",
+                "CMAKE_MAKE_PROGRAM": "<你的Ninja路径>/ninja.exe",
+                "CMAKE_TOOLCHAIN_FILE": "<你的vcpkg路径>/scripts/buildsystems/vcpkg.cmake"
+            }
         }
     ],
     "buildPresets": [
         { "name": "local-debug",   "configurePreset": "local-debug" },
         { "name": "local-release", "configurePreset": "local-release" },
-        { "name": "local-asan",    "configurePreset": "local-asan" }
+        { "name": "local-asan",    "configurePreset": "local-asan" },
+        { "name": "local-static",  "configurePreset": "local-static" }
     ],
     "testPresets": [
         {
