@@ -102,15 +102,12 @@ QString AboutDialog::buildInfoText()
     // Qt 版本（运行时）
     lines << QStringLiteral("Qt: %1").arg(QString::fromLatin1(qVersion()));
 
-    // FFmpeg 总版本（运行时）
-    lines << QStringLiteral("FFmpeg: %1").arg(QString::fromUtf8(av_version_info()));
-
     // FFmpeg 各子库版本（运行时）
-    lines << QStringLiteral("  libavcodec: %1").arg(ffmpegVersionToString(avcodec_version()));
-    lines << QStringLiteral("  libavformat: %1").arg(ffmpegVersionToString(avformat_version()));
-    lines << QStringLiteral("  libavutil: %1").arg(ffmpegVersionToString(avutil_version()));
-    lines << QStringLiteral("  libswscale: %1").arg(ffmpegVersionToString(swscale_version()));
-    lines << QStringLiteral("  libswresample: %1").arg(ffmpegVersionToString(swresample_version()));
+    lines << QStringLiteral("libavcodec: %1").arg(ffmpegVersionToString(avcodec_version()));
+    lines << QStringLiteral("libavformat: %1").arg(ffmpegVersionToString(avformat_version()));
+    lines << QStringLiteral("libavutil: %1").arg(ffmpegVersionToString(avutil_version()));
+    lines << QStringLiteral("libswscale: %1").arg(ffmpegVersionToString(swscale_version()));
+    lines << QStringLiteral("libswresample: %1").arg(ffmpegVersionToString(swresample_version()));
 
     return lines.join(QStringLiteral("\n"));
 }
@@ -221,9 +218,9 @@ void AboutDialog::setupUI()
          QStringLiteral("%1 %2").arg(QStringLiteral(APP_COMPILER_ID),
                                      QStringLiteral(APP_COMPILER_VERSION))},
         {QStringLiteral("Qt"), QString::fromLatin1(qVersion())},
-        {QStringLiteral("FFmpeg"), QString::fromUtf8(av_version_info())},
         {QStringLiteral("libavcodec"), ffmpegVersionToString(avcodec_version())},
         {QStringLiteral("libavformat"), ffmpegVersionToString(avformat_version())},
+        {QStringLiteral("libavutil"), ffmpegVersionToString(avutil_version())},
         {QStringLiteral("libswscale"), ffmpegVersionToString(swscale_version())},
         {QStringLiteral("libswresample"), ffmpegVersionToString(swresample_version())},
     });

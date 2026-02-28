@@ -41,12 +41,14 @@ TEST(AboutDialogTest, BuildInfoContainsQtVersion)
         << "构建信息应包含 Qt 版本: " << info.toStdString();
 }
 
-TEST(AboutDialogTest, BuildInfoContainsFFmpegVersion)
+TEST(AboutDialogTest, BuildInfoContainsFFmpegLibs)
 {
     QString info = AboutDialog::buildInfoText();
-    // 应包含 FFmpeg 总版本字符串
-    EXPECT_TRUE(info.contains("FFmpeg"))
-        << "构建信息应包含 FFmpeg 字段: " << info.toStdString();
+    // 应包含实际使用的 FFmpeg 子库
+    EXPECT_TRUE(info.contains("libavcodec"))
+        << "构建信息应包含 libavcodec: " << info.toStdString();
+    EXPECT_TRUE(info.contains("libavformat"))
+        << "构建信息应包含 libavformat: " << info.toStdString();
 }
 
 TEST(AboutDialogTest, BuildInfoContainsCompiler)
