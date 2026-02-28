@@ -102,6 +102,52 @@ TEST(AVSyncChartWidgetTest, BuildSyncDeltaSeries_AudioAhead) {
     }
 }
 
+TEST(AVSyncChartWidgetTest, BuildSyncDeltaSeries_AudioBehind) {
+    // 音频 DTS 比视频慢 30ms → delta 为负
+    QVector<PacketInfo> packets;
+    for (int i = 0; i < 4; ++i) {
+        packets.append(makePacket(i * 2,     AVMEDIA_TYPE_VIDEO, i * 0.04 + 0.03, i * 2000, 0));
+        packets.append(makePacket(i * 2 + 1, AVMEDIA_TYPE_AUDIO, i * 0.04,        i * 2000 + 1000, 1));
+    }
+
+    auto series = AVSyncChartWidget::buildSyncDeltaSeries(packets, 0, 1, true);
+    EXPECT_EQ(series.size(), 4);
+    for (const auto &pt : series) {
+        EXPECT_NEAR(pt.y(), -30.0, 5.0); // delta ≈ -30 ms（音频滞后）
+    }
+}
+
+TEST(AVSyncChartWidgetTest, BuildSyncDeltaSeries_MultipleAudioBetweenVideo) {
+    // 两个视频 packet 之间有多个音频 packet → delta 递增（锯齿效应）
+    QVector<PacketInfo> packets;
+    packets.append(makePacket(0, AVMEDIA_TYPE_VIDEO, 0.0,  0, 0));
+    packets.append(makePacket(1, AVMEDIA_TYPE_AUDIO, 0.01, 1000, 1));
+    packets.append(makePacket(2, AVMEDIA_TYPE_AUDIO, 0.02, 2000, 1));
+    packets.append(makePacket(3, AVMEDIA_TYPE_AUDIO, 0.03, 3000, 1));
+    packets.append(makePacket(4, AVMEDIA_TYPE_VIDEO, 0.04, 4000, 0));
+    packets.append(makePacket(5, AVMEDIA_TYPE_AUDIO, 0.04, 5000, 1));
+
+    auto series = AVSyncChartWidget::buildSyncDeltaSeries(packets, 0, 1, false);
+    ASSERT_EQ(series.size(), 4);
+    EXPECT_NEAR(series[0].y(), 10.0, 1.0);  // 0.01 - 0.0 = 10ms
+    EXPECT_NEAR(series[1].y(), 20.0, 1.0);  // 0.02 - 0.0 = 20ms
+    EXPECT_NEAR(series[2].y(), 30.0, 1.0);  // 0.03 - 0.0 = 30ms
+    EXPECT_NEAR(series[3].y(),  0.0, 1.0);  // 0.04 - 0.04 = 0ms
+}
+
+TEST(AVSyncChartWidgetTest, BuildSyncDeltaSeries_NoVideoBeforeAudio) {
+    // 音频 packet 在视频 packet 之前出现 → 被跳过
+    QVector<PacketInfo> packets;
+    packets.append(makePacket(0, AVMEDIA_TYPE_AUDIO, 0.0, 0, 1));
+    packets.append(makePacket(1, AVMEDIA_TYPE_AUDIO, 0.02, 1000, 1));
+    packets.append(makePacket(2, AVMEDIA_TYPE_VIDEO, 0.04, 2000, 0));
+    packets.append(makePacket(3, AVMEDIA_TYPE_AUDIO, 0.04, 3000, 1));
+
+    auto series = AVSyncChartWidget::buildSyncDeltaSeries(packets, 0, 1, false);
+    ASSERT_EQ(series.size(), 1); // 只有最后一个音频有配对的视频
+    EXPECT_NEAR(series[0].y(), 0.0, 1.0);
+}
+
 TEST(AVSyncChartWidgetTest, BuildSyncDeltaSeries_OffsetMode) {
     QVector<PacketInfo> packets;
     // pos = 1MB, 2MB

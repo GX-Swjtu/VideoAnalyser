@@ -6,6 +6,8 @@
 #include <QComboBox>
 #include <QLabel>
 #include <algorithm>
+#include <cmath>
+#include <limits>
 
 #include <QtCharts/QChart>
 #include <QtCharts/QChartView>
@@ -131,33 +133,26 @@ QVector<QPointF> AVSyncChartWidget::buildSyncDeltaSeries(
     int videoStreamIndex, int audioStreamIndex,
     bool useOffset)
 {
-    // 收集视频 DTS 时间序列（已按文件顺序排列，通常 DTS 单调递增）
-    QVector<double> videoTimeSeries;
-    videoTimeSeries.reserve(packets.size() / 2);
-    for (const auto &p : packets) {
-        if (p.streamIndex == videoStreamIndex && p.mediaType == AVMEDIA_TYPE_VIDEO) {
-            videoTimeSeries.append(p.dtsTime);
-        }
-    }
-
-    if (videoTimeSeries.isEmpty()) return {};
-
-    // 对每个音频 packet，按序号配对视频 packet，计算 DTS 差值
+    // 按文件/mux 顺序遍历 packet，跟踪最近一个视频 DTS，
+    // 在每个音频 packet 处计算 delta = audio_dts - last_video_dts (ms)。
+    // 对同步良好的文件，delta 在 ±1 个视频帧时长内波动；
+    // 若存在漂移，delta 的基线会随时间偏移。
     QVector<QPointF> points;
     points.reserve(packets.size() / 2);
-    int audioIdx = 0;
+
+    double lastVideoDts = std::numeric_limits<double>::quiet_NaN();
+
     for (const auto &p : packets) {
-        if (p.streamIndex != audioStreamIndex) continue;
-        if (p.mediaType != AVMEDIA_TYPE_AUDIO) continue;
-        if (audioIdx >= videoTimeSeries.size()) break;
+        if (p.streamIndex == videoStreamIndex && p.mediaType == AVMEDIA_TYPE_VIDEO) {
+            lastVideoDts = p.dtsTime;
+        } else if (p.streamIndex == audioStreamIndex && p.mediaType == AVMEDIA_TYPE_AUDIO) {
+            if (std::isnan(lastVideoDts)) continue; // 尚无视频 DTS
 
-        double videoDts = videoTimeSeries[audioIdx];
-        double deltaMs = (p.dtsTime - videoDts) * 1000.0;
-
-        double x = useOffset ? (p.pos >= 0 ? p.pos / (1024.0 * 1024.0) : 0.0)
-                             : p.dtsTime;
-        points.append(QPointF(x, deltaMs));
-        ++audioIdx;
+            double deltaMs = (p.dtsTime - lastVideoDts) * 1000.0;
+            double x = useOffset ? (p.pos >= 0 ? p.pos / (1024.0 * 1024.0) : 0.0)
+                                 : p.dtsTime;
+            points.append(QPointF(x, deltaMs));
+        }
     }
     return points;
 }
