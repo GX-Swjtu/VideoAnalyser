@@ -521,6 +521,7 @@ jobs:
             libxi-dev libxrender-dev libxrandr-dev libxcursor-dev \
             libxkbcommon-dev libxkbcommon-x11-dev \
             '^libxcb.*-dev' \
+            libsm-dev libice-dev \
             libatspi2.0-dev libdbus-1-dev \
             libharfbuzz-dev libdrm-dev \
             libinput-dev libmtdev-dev \
