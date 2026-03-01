@@ -91,8 +91,14 @@ set_target_properties(VideoAnalyserTests PROPERTIES AUTOMOC ON)
 if(TARGET VideoAnalyserSanitizers)
     target_link_libraries(VideoAnalyserTests PRIVATE VideoAnalyserSanitizers)
 endif()
-# 全静态构建：添加运行时静态链接标志
+# 全静态构建：添加运行时静态链接标志 + 导入 offscreen 平台插件（CI 无图形环境需要）
 if(VA_STATIC_BUILD)
+    if(QT_VERSION_MAJOR EQUAL 6)
+        # 静态 Qt 的平台插件需显式导入；测试在 CI 中使用 QT_QPA_PLATFORM=offscreen
+        qt_import_plugins(VideoAnalyserTests
+            INCLUDE Qt::QOffscreenIntegrationPlugin
+        )
+    endif()
     if(MINGW)
         target_link_options(VideoAnalyserTests PRIVATE -static)
     endif()
