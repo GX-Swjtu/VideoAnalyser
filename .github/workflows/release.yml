@@ -1,14 +1,18 @@
 # ============================================
 # Release 工作流：push tag (v*) 时自动构建并发布
-# 生成 6 个变体的发行资产：
-#   1. Windows MinGW Release 动态链接压缩包
-#   2. Windows MSVC  Release 动态链接压缩包
-#   3. Windows MinGW Release 静态单文件
-#   4. Windows MSVC  Release 静态单文件
-#   5. Linux   GCC   Release 动态链接压缩包
-#   6. Linux   GCC   Release 静态单文件
-#   7. macOS   Clang Release 动态链接 DMG（Apple Silicon）
-#   8. macOS   Clang Release 静态单文件（Apple Silicon）
+# 生成 12 个变体的发行资产：
+#   1.  Windows MinGW Release 动态链接压缩包
+#   2.  Windows MSVC  Release 动态链接压缩包
+#   3.  Windows MinGW Release 静态单文件
+#   4.  Windows MSVC  Release 静态单文件
+#   5.  Linux   GCC   Release 动态链接压缩包
+#   6.  Linux   GCC   Release 静态单文件
+#   7.  macOS   Clang Release 动态链接 DMG（Apple Silicon）
+#   8.  macOS   Clang Release 静态单文件（Apple Silicon）
+#   9.  Windows MinGW Release 静态单文件 + UPX 压缩
+#   10. Windows MSVC  Release 静态单文件 + UPX 压缩
+#   11. Linux   GCC   Release 静态单文件 + UPX 压缩
+#   12. macOS   Clang Release 静态单文件 + UPX 压缩（Apple Silicon）
 # ============================================
 name: Release
 
@@ -288,6 +292,27 @@ jobs:
           name: VideoAnalyser-${{ github.ref_name }}-windows-mingw-x64-static
           path: VideoAnalyser-${{ github.ref_name }}-windows-mingw-x64-static/
 
+      - name: Install UPX
+        run: choco install upx -y
+
+      - name: Package (UPX)
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}"
+          $dir = "VideoAnalyser-${version}-windows-mingw-x64-static-upx"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Copy-Item "build/windows-static/VideoAnalyser.exe" "$dir/"
+          & upx --best "$dir/VideoAnalyser.exe"
+          $orig = (Get-Item "build/windows-static/VideoAnalyser.exe").Length
+          $compressed = (Get-Item "$dir/VideoAnalyser.exe").Length
+          Write-Host "UPX: $([math]::Round($orig / 1MB, 2)) MB -> $([math]::Round($compressed / 1MB, 2)) MB"
+          Copy-Item "LICENSE" "$dir/" -ErrorAction SilentlyContinue
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VideoAnalyser-${{ github.ref_name }}-windows-mingw-x64-static-upx
+          path: VideoAnalyser-${{ github.ref_name }}-windows-mingw-x64-static-upx/
+
   # ── 4. Windows MSVC 静态单文件 ───────────────────────
   win-msvc-static:
     name: Windows MSVC (Static)
@@ -360,6 +385,27 @@ jobs:
         with:
           name: VideoAnalyser-${{ github.ref_name }}-windows-msvc-x64-static
           path: VideoAnalyser-${{ github.ref_name }}-windows-msvc-x64-static/
+
+      - name: Install UPX
+        run: choco install upx -y
+
+      - name: Package (UPX)
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}"
+          $dir = "VideoAnalyser-${version}-windows-msvc-x64-static-upx"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Copy-Item "build/windows-msvc-static/VideoAnalyser.exe" "$dir/"
+          & upx --best "$dir/VideoAnalyser.exe"
+          $orig = (Get-Item "build/windows-msvc-static/VideoAnalyser.exe").Length
+          $compressed = (Get-Item "$dir/VideoAnalyser.exe").Length
+          Write-Host "UPX: $([math]::Round($orig / 1MB, 2)) MB -> $([math]::Round($compressed / 1MB, 2)) MB"
+          Copy-Item "LICENSE" "$dir/" -ErrorAction SilentlyContinue
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VideoAnalyser-${{ github.ref_name }}-windows-msvc-x64-static-upx
+          path: VideoAnalyser-${{ github.ref_name }}-windows-msvc-x64-static-upx/
 
   # ── 5. Linux GCC 动态链接 ─────────────────────────────
   linux-gcc:
@@ -590,6 +636,30 @@ jobs:
           name: VideoAnalyser-${{ github.ref_name }}-linux-gcc-x64-static
           path: VideoAnalyser-${{ github.ref_name }}-linux-gcc-x64-static/
 
+      - name: Install UPX
+        run: |
+          UPX_VERSION="4.2.4"
+          curl -sL "https://github.com/upx/upx/releases/download/v${UPX_VERSION}/upx-${UPX_VERSION}-amd64_linux.tar.xz" | tar xJ
+          sudo cp "upx-${UPX_VERSION}-amd64_linux/upx" /usr/local/bin/
+          upx --version
+
+      - name: Package (UPX)
+        run: |
+          version="${{ github.ref_name }}"
+          dir="VideoAnalyser-${version}-linux-gcc-x64-static-upx"
+          mkdir -p "$dir"
+          cp build/linux-static/VideoAnalyser "$dir/"
+          orig_size=$(stat -c%s "build/linux-static/VideoAnalyser")
+          upx --best "$dir/VideoAnalyser"
+          compressed_size=$(stat -c%s "$dir/VideoAnalyser")
+          echo "UPX: $(echo "scale=2; $orig_size / 1048576" | bc) MB -> $(echo "scale=2; $compressed_size / 1048576" | bc) MB"
+          cp LICENSE "$dir/" 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VideoAnalyser-${{ github.ref_name }}-linux-gcc-x64-static-upx
+          path: VideoAnalyser-${{ github.ref_name }}-linux-gcc-x64-static-upx/
+
   # ── 7. macOS Clang 动态链接 ───────────────────────────
   macos-clang:
     name: macOS Clang (Dynamic)
@@ -750,6 +820,33 @@ jobs:
         with:
           name: macos-clang-static
           path: VideoAnalyser-*-macos-arm64-static.dmg
+
+      - name: Install UPX
+        run: brew install upx
+
+      - name: Package (UPX)
+        run: |
+          version="${{ github.ref_name }}"
+          dir="VideoAnalyser-${version}-macos-arm64-static-upx"
+          mkdir -p "$dir"
+          cp -R build/macos-static/VideoAnalyser.app "$dir/"
+          app_bin="$dir/VideoAnalyser.app/Contents/MacOS/VideoAnalyser"
+          orig_size=$(stat -f%z "$app_bin")
+          upx --best "$app_bin"
+          compressed_size=$(stat -f%z "$app_bin")
+          echo "UPX: $(echo "scale=2; $orig_size / 1048576" | bc) MB -> $(echo "scale=2; $compressed_size / 1048576" | bc) MB"
+          cp LICENSE "$dir/" 2>/dev/null || true
+          # 创建 DMG
+          mkdir -p dmg_staging_upx
+          cp -R "$dir/VideoAnalyser.app" dmg_staging_upx/
+          ln -s /Applications dmg_staging_upx/Applications
+          hdiutil create -volname "VideoAnalyser" -srcfolder dmg_staging_upx \
+            -ov -format UDZO "${dir}.dmg"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-clang-static-upx
+          path: VideoAnalyser-*-macos-arm64-static-upx.dmg
 
   # ── 创建 GitHub Release ──────────────────────────────
   release:
