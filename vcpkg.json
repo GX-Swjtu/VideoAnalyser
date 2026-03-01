@@ -12,7 +12,24 @@
                 "avfilter",
                 "avformat",
                 "swresample",
-                "swscale"
+                "swscale",
+
+                "dav1d",
+                "vpx",
+                "opus",
+                "vorbis",
+                "theora",
+                "openh264",
+                "openjpeg",
+                "speex",
+                "mp3lame",
+                "webp",
+
+                "bzip2",
+                "zlib",
+                "lzma",
+                "iconv",
+                "xml2"
             ]
         },
         "gtest"
