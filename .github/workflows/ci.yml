@@ -14,7 +14,7 @@ on:
 env:
   QT_INSTALL_DIR: "${{ github.workspace }}/.qt"
   VCPKG_DOWNLOADS: "${{ github.workspace }}/.vcpkg/downloads"
-  VCPKG_BINARY_SOURCES: "clear;files,${{ github.workspace }}/.vcpkg/bincache,readwrite"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
   VCPKG_COMMIT: 'b2f068faf45a3f04145bec0f52a66526ad590227'
 
 jobs:
@@ -25,21 +25,24 @@ jobs:
   debug-windows:
     name: Debug — Windows MinGW
     runs-on: windows-latest
-    env:
-      VCPKG_CACHE_TRIPLET: x64-mingw-dynamic
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache vcpkg artifacts
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Cache vcpkg downloads
         uses: actions/cache@v4
         with:
-          path: |
-            ${{ env.VCPKG_DOWNLOADS }}
-            ${{ github.workspace }}/.vcpkg/bincache
-          key: vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'triplets/*.cmake') }}
+          path: ${{ env.VCPKG_DOWNLOADS }}
+          key: vcpkg-downloads-${{ runner.os }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
-            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
-            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
+            vcpkg-downloads-${{ runner.os }}-${{ env.VCPKG_COMMIT }}-
+            vcpkg-downloads-${{ runner.os }}-
 
       - name: Install Qt (MinGW)
         uses: jurplel/install-qt-action@v4
@@ -59,11 +62,9 @@ jobs:
           $mingwBin = Get-ChildItem "$env:IQTA_TOOLS\mingw*\bin" -Directory | Select-Object -First 1
           echo "$mingwBin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
 
-      - name: Ensure vcpkg cache directories
+      - name: Ensure vcpkg downloads directory
         shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DOWNLOADS" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE/.vcpkg/bincache" | Out-Null
+        run: New-Item -ItemType Directory -Force -Path "$env:VCPKG_DOWNLOADS" | Out-Null
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
@@ -86,21 +87,24 @@ jobs:
   debug-linux:
     name: Debug — Linux GCC
     runs-on: ubuntu-24.04
-    env:
-      VCPKG_CACHE_TRIPLET: x64-linux
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache vcpkg artifacts
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Cache vcpkg downloads
         uses: actions/cache@v4
         with:
-          path: |
-            ${{ env.VCPKG_DOWNLOADS }}
-            ${{ github.workspace }}/.vcpkg/bincache
-          key: vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'triplets/*.cmake') }}
+          path: ${{ env.VCPKG_DOWNLOADS }}
+          key: vcpkg-downloads-${{ runner.os }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
-            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
-            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
+            vcpkg-downloads-${{ runner.os }}-${{ env.VCPKG_COMMIT }}-
+            vcpkg-downloads-${{ runner.os }}-
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
@@ -120,11 +124,9 @@ jobs:
             libgl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-0 \
             libxcb-xinerama0 libxcb-cursor0
 
-      - name: Ensure vcpkg cache directories
+      - name: Ensure vcpkg downloads directory
         shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DOWNLOADS" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE/.vcpkg/bincache" | Out-Null
+        run: New-Item -ItemType Directory -Force -Path "$env:VCPKG_DOWNLOADS" | Out-Null
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
@@ -147,21 +149,24 @@ jobs:
   debug-macos:
     name: Debug — macOS Clang
     runs-on: macos-14
-    env:
-      VCPKG_CACHE_TRIPLET: arm64-osx
     steps:
       - uses: actions/checkout@v4
 
-      - name: Cache vcpkg artifacts
+      - name: Export GitHub Actions cache environment variables
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Cache vcpkg downloads
         uses: actions/cache@v4
         with:
-          path: |
-            ${{ env.VCPKG_DOWNLOADS }}
-            ${{ github.workspace }}/.vcpkg/bincache
-          key: vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'triplets/*.cmake') }}
+          path: ${{ env.VCPKG_DOWNLOADS }}
+          key: vcpkg-downloads-${{ runner.os }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
-            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-${{ env.VCPKG_COMMIT }}-
-            vcpkg-${{ runner.os }}-${{ env.VCPKG_CACHE_TRIPLET }}-
+            vcpkg-downloads-${{ runner.os }}-${{ env.VCPKG_COMMIT }}-
+            vcpkg-downloads-${{ runner.os }}-
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
@@ -176,11 +181,9 @@ jobs:
       - name: Install system dependencies
         run: brew install nasm
 
-      - name: Ensure vcpkg cache directories
+      - name: Ensure vcpkg downloads directory
         shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path "$env:VCPKG_DOWNLOADS" | Out-Null
-          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE/.vcpkg/bincache" | Out-Null
+        run: New-Item -ItemType Directory -Force -Path "$env:VCPKG_DOWNLOADS" | Out-Null
 
       - name: Setup vcpkg
         uses: lukka/run-vcpkg@v11
