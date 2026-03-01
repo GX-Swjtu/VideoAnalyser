@@ -1,6 +1,9 @@
 #include "bitratechartwidget.h"
 #include "packetreader.h"
+#include "themeutils.h"
 
+#include <QApplication>
+#include <QStyleHints>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QComboBox>
@@ -48,8 +51,13 @@ BitrateChartWidget::BitrateChartWidget(QWidget *parent)
     m_chartView->setRubberBand(QChartView::RectangleRubberBand);
     mainLayout->addWidget(m_chartView, 1);
 
+    // 初始化图表主题
+    m_chart->setTheme(isDarkMode() ? QChart::ChartThemeDark : QChart::ChartThemeLight);
+
     connect(m_xAxisCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &BitrateChartWidget::onXAxisModeChanged);
+    connect(QApplication::styleHints(), &QStyleHints::colorSchemeChanged,
+            this, &BitrateChartWidget::onColorSchemeChanged);
 }
 
 void BitrateChartWidget::setPackets(const QVector<PacketInfo> &packets,
@@ -75,6 +83,12 @@ void BitrateChartWidget::onXAxisModeChanged(int /*index*/)
     rebuildChart();
 }
 
+void BitrateChartWidget::onColorSchemeChanged()
+{
+    m_chart->setTheme(isDarkMode() ? QChart::ChartThemeDark : QChart::ChartThemeLight);
+    rebuildChart();
+}
+
 int BitrateChartWidget::findVideoStreamIndex() const
 {
     for (const auto &s : m_streams) {
@@ -89,6 +103,9 @@ void BitrateChartWidget::rebuildChart()
     const auto axes = m_chart->axes();
     for (auto *axis : axes)
         m_chart->removeAxis(axis);
+
+    // 根据当前主题设置图表主题
+    m_chart->setTheme(isDarkMode() ? QChart::ChartThemeDark : QChart::ChartThemeLight);
 
     int videoIdx = findVideoStreamIndex();
     if (videoIdx < 0 || m_packets.isEmpty()) return;

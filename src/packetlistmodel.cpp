@@ -1,4 +1,5 @@
 #include "packetlistmodel.h"
+#include "themeutils.h"
 
 #include <QBrush>
 #include <QColor>
@@ -101,9 +102,22 @@ QString PacketListModel::frameTypeString(int pictType, bool isIDR)
     }
 }
 
-QColor PacketListModel::frameTypeColor(int pictType, bool isIDR)
+QColor PacketListModel::frameTypeColor(int pictType, bool isIDR, bool isDark)
 {
     if (pictType <= 0) return QColor();
+    if (isDark) {
+        switch (pictType) {
+        case AV_PICTURE_TYPE_I:
+            return isIDR ? QColor(140, 50, 50)      // IDR I帧：暗红
+                         : QColor(120, 60, 60);     // Non-IDR I帧：暗浅红
+        case AV_PICTURE_TYPE_P:
+            return QColor(50, 65, 130);             // P帧：暗蓝
+        case AV_PICTURE_TYPE_B:
+            return QColor(45, 100, 55);             // B帧：暗绿
+        default:
+            return QColor(70, 70, 70);              // 其他：暗灰
+        }
+    }
     switch (pictType) {
     case AV_PICTURE_TYPE_I:
         return isIDR ? QColor(255, 160, 160)    // IDR I帧：深红
@@ -169,6 +183,15 @@ QVariant PacketListModel::data(const QModelIndex &index, int role) const
     }
 
     if (role == Qt::BackgroundRole && index.column() == ColType) {
+        const bool dark = isDarkMode();
+        if (dark) {
+            switch (pkt.mediaType) {
+            case AVMEDIA_TYPE_VIDEO:    return QBrush(QColor(40, 60, 110));   // 暗蓝
+            case AVMEDIA_TYPE_AUDIO:    return QBrush(QColor(35, 85, 35));    // 暗绿
+            case AVMEDIA_TYPE_SUBTITLE: return QBrush(QColor(100, 90, 30));   // 暗黄
+            default:                    return QBrush(QColor(70, 70, 70));    // 暗灰
+            }
+        }
         switch (pkt.mediaType) {
         case AVMEDIA_TYPE_VIDEO:    return QBrush(QColor(200, 220, 255));  // 浅蓝
         case AVMEDIA_TYPE_AUDIO:    return QBrush(QColor(200, 255, 200));  // 浅绿
@@ -178,8 +201,16 @@ QVariant PacketListModel::data(const QModelIndex &index, int role) const
     }
 
     if (role == Qt::BackgroundRole && index.column() == ColFrame) {
-        QColor c = frameTypeColor(pkt.pictType, pkt.isIDR);
+        QColor c = frameTypeColor(pkt.pictType, pkt.isIDR, isDarkMode());
         if (c.isValid()) return QBrush(c);
+    }
+
+    // 有彩色背景的列使用对比色前景，确保文字可读
+    if (role == Qt::ForegroundRole && (index.column() == ColType || index.column() == ColFrame)) {
+        bool hasBg = (index.column() == ColType)
+                     || (index.column() == ColFrame && frameTypeColor(pkt.pictType, pkt.isIDR).isValid());
+        if (hasBg)
+            return QBrush(isDarkMode() ? QColor(220, 220, 220) : QColor(0, 0, 0));
     }
 
     if (role == Qt::TextAlignmentRole) {

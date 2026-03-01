@@ -223,6 +223,33 @@ TEST_F(PacketListModelTest, FrameTypeColorStatic) {
     EXPECT_FALSE(unknownColor.isValid());
 }
 
+TEST_F(PacketListModelTest, FrameTypeColorDarkMode) {
+    // 暗色模式 IDR 和 Non-IDR I帧颜色不同
+    QColor idrDark = PacketListModel::frameTypeColor(AV_PICTURE_TYPE_I, true, true);
+    QColor nonIdrDark = PacketListModel::frameTypeColor(AV_PICTURE_TYPE_I, false, true);
+    EXPECT_TRUE(idrDark.isValid());
+    EXPECT_TRUE(nonIdrDark.isValid());
+    EXPECT_NE(idrDark, nonIdrDark);
+
+    // 暗色模式 P帧和 B帧颜色有效且不同
+    QColor pDark = PacketListModel::frameTypeColor(AV_PICTURE_TYPE_P, false, true);
+    QColor bDark = PacketListModel::frameTypeColor(AV_PICTURE_TYPE_B, false, true);
+    EXPECT_TRUE(pDark.isValid());
+    EXPECT_TRUE(bDark.isValid());
+    EXPECT_NE(pDark, bDark);
+
+    // 暗色模式颜色比亮色模式暗（lightness 更低）
+    QColor idrLight = PacketListModel::frameTypeColor(AV_PICTURE_TYPE_I, true, false);
+    EXPECT_LT(idrDark.lightness(), idrLight.lightness());
+
+    QColor pLight = PacketListModel::frameTypeColor(AV_PICTURE_TYPE_P, false, false);
+    EXPECT_LT(pDark.lightness(), pLight.lightness());
+
+    // 未知帧类型暗色模式也无颜色
+    QColor unknownDark = PacketListModel::frameTypeColor(-1, false, true);
+    EXPECT_FALSE(unknownDark.isValid());
+}
+
 TEST_F(PacketListModelTest, FrameColumnDisplayRole) {
     QVector<PacketInfo> packets;
     // IDR I帧

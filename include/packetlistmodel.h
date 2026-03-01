@@ -43,7 +43,7 @@ public:
     static QString mediaTypeString(AVMediaType type);
     static QString mediaTypeIcon(AVMediaType type);
     static QString frameTypeString(int pictType, bool isIDR);
-    static QColor frameTypeColor(int pictType, bool isIDR);
+    static QColor frameTypeColor(int pictType, bool isIDR, bool isDark = false);
 
 private:
     QVector<PacketInfo> m_packets;

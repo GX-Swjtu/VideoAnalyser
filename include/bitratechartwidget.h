@@ -37,6 +37,7 @@ public:
 
 private slots:
     void onXAxisModeChanged(int index);
+    void onColorSchemeChanged();
 
 private:
     void rebuildChart();

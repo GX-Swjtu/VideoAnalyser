@@ -1,6 +1,9 @@
 #include "avsyncchartwidget.h"
 #include "packetreader.h"
+#include "themeutils.h"
 
+#include <QApplication>
+#include <QStyleHints>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QComboBox>
@@ -51,8 +54,13 @@ AVSyncChartWidget::AVSyncChartWidget(QWidget *parent)
     m_chartView->setRubberBand(QChartView::RectangleRubberBand);
     mainLayout->addWidget(m_chartView, 1);
 
+    // 初始化图表主题
+    m_chart->setTheme(isDarkMode() ? QChart::ChartThemeDark : QChart::ChartThemeLight);
+
     connect(m_xAxisCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &AVSyncChartWidget::onXAxisModeChanged);
+    connect(QApplication::styleHints(), &QStyleHints::colorSchemeChanged,
+            this, &AVSyncChartWidget::onColorSchemeChanged);
 }
 
 void AVSyncChartWidget::setPackets(const QVector<PacketInfo> &packets,
@@ -78,12 +86,21 @@ void AVSyncChartWidget::onXAxisModeChanged(int /*index*/)
     rebuildChart();
 }
 
+void AVSyncChartWidget::onColorSchemeChanged()
+{
+    m_chart->setTheme(isDarkMode() ? QChart::ChartThemeDark : QChart::ChartThemeLight);
+    rebuildChart();
+}
+
 void AVSyncChartWidget::rebuildChart()
 {
     m_chart->removeAllSeries();
     const auto axes = m_chart->axes();
     for (auto *axis : axes)
         m_chart->removeAxis(axis);
+
+    // 根据当前主题设置图表主题
+    m_chart->setTheme(isDarkMode() ? QChart::ChartThemeDark : QChart::ChartThemeLight);
 
     // 查找首个视频流和音频流
     int videoIdx = -1, audioIdx = -1;
