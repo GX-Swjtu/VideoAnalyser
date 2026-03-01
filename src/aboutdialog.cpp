@@ -432,4 +432,16 @@ void AboutDialog::adjustSizeToContent()
     int maxH = scr ? static_cast<int>(scr->availableGeometry().height() * 0.85) : 900;
 
     resize(width(), qBound(minimumHeight(), totalHeight, maxH));
+
+    // 调整尺寸后重新居中到父窗口，避免窗口位置偏移
+    if (parentWidget()) {
+        QRect parentGeo = parentWidget()->geometry();
+        int x = parentGeo.x() + (parentGeo.width() - width()) / 2;
+        int y = parentGeo.y() + (parentGeo.height() - height()) / 2;
+        move(x, y);
+    } else if (auto *scr2 = screen()) {
+        QRect screenGeo = scr2->availableGeometry();
+        move(screenGeo.x() + (screenGeo.width() - width()) / 2,
+             screenGeo.y() + (screenGeo.height() - height()) / 2);
+    }
 }
