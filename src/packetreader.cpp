@@ -103,6 +103,29 @@ bool PacketReader::readAllPackets()
     AVPacket *pkt = av_packet_alloc();
     if (!pkt) return false;
 
+    // 为每个视频流创建 parser，用于解析帧类型（I/P/B）和 IDR 标志
+    QMap<int, AVCodecParserContext*> parsers;
+    QMap<int, AVCodecContext*> parserCodecCtxs;
+    for (unsigned int i = 0; i < m_formatCtx->nb_streams; ++i) {
+        AVStream *s = m_formatCtx->streams[i];
+        if (s->codecpar->codec_type == AVMEDIA_TYPE_VIDEO) {
+            AVCodecParserContext *parser = av_parser_init(s->codecpar->codec_id);
+            if (parser) {
+                // 告知 parser 每次输入都是完整帧，避免输出延迟
+                parser->flags |= PARSER_FLAG_COMPLETE_FRAMES;
+                const AVCodec *codec = avcodec_find_decoder(s->codecpar->codec_id);
+                AVCodecContext *codecCtx = avcodec_alloc_context3(codec);
+                if (codecCtx) {
+                    avcodec_parameters_to_context(codecCtx, s->codecpar);
+                    parsers[static_cast<int>(i)] = parser;
+                    parserCodecCtxs[static_cast<int>(i)] = codecCtx;
+                } else {
+                    av_parser_close(parser);
+                }
+            }
+        }
+    }
+
     int index = 0;
     while (av_read_frame(m_formatCtx, pkt) >= 0) {
         PacketInfo info;
@@ -154,6 +177,26 @@ bool PacketReader::readAllPackets()
             }
         }
 
+        // 使用 parser 解析视频帧类型（I/P/B）和 IDR 标志
+        if (info.mediaType == AVMEDIA_TYPE_VIDEO && parsers.contains(pkt->stream_index)) {
+            AVCodecParserContext *parser = parsers[pkt->stream_index];
+            AVCodecContext *codecCtx = parserCodecCtxs[pkt->stream_index];
+            uint8_t *outbuf = nullptr;
+            int outsize = 0;
+            av_parser_parse2(parser, codecCtx, &outbuf, &outsize,
+                             pkt->data, pkt->size,
+                             pkt->pts, pkt->dts, pkt->pos);
+            if (outsize > 0) {
+                info.pictType = parser->pict_type;
+                // parser->key_frame 对 H.264 表示检测到 IDR NAL unit
+                info.isIDR = (parser->pict_type == AV_PICTURE_TYPE_I && parser->key_frame);
+            } else if (pkt->flags & AV_PKT_FLAG_KEY) {
+                // 回退：KEY 标志通常意味着关键帧（I帧）
+                info.pictType = AV_PICTURE_TYPE_I;
+                info.isIDR = true;
+            }
+        }
+
         m_packets.append(info);
         av_packet_unref(pkt);
 
@@ -167,6 +210,15 @@ bool PacketReader::readAllPackets()
                 emit progressChanged(index, 0);
             }
         }
+    }
+
+    // 释放 parser 资源
+    for (auto it = parserCodecCtxs.begin(); it != parserCodecCtxs.end(); ++it) {
+        AVCodecContext *ctx = it.value();
+        avcodec_free_context(&ctx);
+    }
+    for (auto it = parsers.begin(); it != parsers.end(); ++it) {
+        av_parser_close(it.value());
     }
 
     av_packet_free(&pkt);

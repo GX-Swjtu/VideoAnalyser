@@ -11,6 +11,7 @@ class PacketListModel : public QAbstractTableModel {
 public:
     enum Column {
         ColType = 0,
+        ColFrame,
         ColIndex,
         ColStream,
         ColOffset,
@@ -41,6 +42,8 @@ public:
     static QString formatFlags(int flags);
     static QString mediaTypeString(AVMediaType type);
     static QString mediaTypeIcon(AVMediaType type);
+    static QString frameTypeString(int pictType, bool isIDR);
+    static QColor frameTypeColor(int pictType, bool isIDR);
 
 private:
     QVector<PacketInfo> m_packets;

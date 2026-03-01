@@ -86,6 +86,37 @@ QString PacketListModel::mediaTypeIcon(AVMediaType type)
     }
 }
 
+QString PacketListModel::frameTypeString(int pictType, bool isIDR)
+{
+    if (pictType <= 0) return QString();
+    switch (pictType) {
+    case AV_PICTURE_TYPE_I:  return isIDR ? QStringLiteral("IDR") : QStringLiteral("I");
+    case AV_PICTURE_TYPE_P:  return QStringLiteral("P");
+    case AV_PICTURE_TYPE_B:  return QStringLiteral("B");
+    case AV_PICTURE_TYPE_S:  return QStringLiteral("S");
+    case AV_PICTURE_TYPE_SI: return QStringLiteral("SI");
+    case AV_PICTURE_TYPE_SP: return QStringLiteral("SP");
+    case AV_PICTURE_TYPE_BI: return QStringLiteral("BI");
+    default:                 return QStringLiteral("?");
+    }
+}
+
+QColor PacketListModel::frameTypeColor(int pictType, bool isIDR)
+{
+    if (pictType <= 0) return QColor();
+    switch (pictType) {
+    case AV_PICTURE_TYPE_I:
+        return isIDR ? QColor(255, 160, 160)    // IDR I帧：深红
+                     : QColor(255, 200, 200);   // Non-IDR I帧：浅红
+    case AV_PICTURE_TYPE_P:
+        return QColor(180, 200, 255);           // P帧：浅蓝
+    case AV_PICTURE_TYPE_B:
+        return QColor(180, 255, 200);           // B帧：浅绿
+    default:
+        return QColor(230, 230, 230);           // 其他：浅灰
+    }
+}
+
 QVariant PacketListModel::data(const QModelIndex &index, int role) const
 {
     if (!index.isValid() || index.row() >= m_packets.size())
@@ -96,6 +127,7 @@ QVariant PacketListModel::data(const QModelIndex &index, int role) const
     if (role == Qt::DisplayRole) {
         switch (index.column()) {
         case ColType:     return mediaTypeIcon(pkt.mediaType);
+        case ColFrame:    return frameTypeString(pkt.pictType, pkt.isIDR);
         case ColIndex:    return pkt.index;
         case ColStream:   return pkt.streamIndex;
         case ColOffset:   return formatOffset(pkt.pos);
@@ -123,6 +155,7 @@ QVariant PacketListModel::data(const QModelIndex &index, int role) const
     if (role == Qt::UserRole) {
         switch (index.column()) {
         case ColType:     return static_cast<int>(pkt.mediaType);
+        case ColFrame:    return pkt.pictType;
         case ColIndex:    return pkt.index;
         case ColStream:   return pkt.streamIndex;
         case ColOffset:   return static_cast<qlonglong>(pkt.pos);
@@ -144,8 +177,14 @@ QVariant PacketListModel::data(const QModelIndex &index, int role) const
         }
     }
 
+    if (role == Qt::BackgroundRole && index.column() == ColFrame) {
+        QColor c = frameTypeColor(pkt.pictType, pkt.isIDR);
+        if (c.isValid()) return QBrush(c);
+    }
+
     if (role == Qt::TextAlignmentRole) {
         switch (index.column()) {
+        case ColFrame:
         case ColIndex:
         case ColStream:
         case ColSize:
@@ -168,6 +207,7 @@ QVariant PacketListModel::headerData(int section, Qt::Orientation orientation, i
 
     switch (section) {
     case ColType:     return QStringLiteral("Type");
+    case ColFrame:    return QStringLiteral("Frame");
     case ColIndex:    return QStringLiteral("Index");
     case ColStream:   return QStringLiteral("Stream");
     case ColOffset:   return QStringLiteral("Offset");

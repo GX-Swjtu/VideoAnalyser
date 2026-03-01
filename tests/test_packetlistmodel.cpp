@@ -2,6 +2,7 @@
 #include "packetlistmodel.h"
 
 #include <QBrush>
+#include <QColor>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -20,7 +21,7 @@ protected:
 
     static PacketInfo makePacket(int index, AVMediaType type, const QString &codec,
                                   int64_t pts, int size, int64_t pos, int flags,
-                                  int stream = 0) {
+                                  int stream = 0, int pictType = -1, bool isIDR = false) {
         PacketInfo p;
         p.index = index;
         p.streamIndex = stream;
@@ -36,6 +37,8 @@ protected:
         p.duration = 40;
         p.durationTime = 0.040;
         p.gopKeyFrameIndex = (type == AVMEDIA_TYPE_VIDEO) ? 0 : -1;
+        p.pictType = pictType;
+        p.isIDR = isIDR;
         return p;
     }
 };
@@ -95,6 +98,7 @@ TEST_F(PacketListModelTest, BackgroundRoleColor) {
 
 TEST_F(PacketListModelTest, HeaderData) {
     EXPECT_EQ(model->headerData(PacketListModel::ColType, Qt::Horizontal, Qt::DisplayRole).toString(), "Type");
+    EXPECT_EQ(model->headerData(PacketListModel::ColFrame, Qt::Horizontal, Qt::DisplayRole).toString(), "Frame");
     EXPECT_EQ(model->headerData(PacketListModel::ColIndex, Qt::Horizontal, Qt::DisplayRole).toString(), "Index");
     EXPECT_EQ(model->headerData(PacketListModel::ColStream, Qt::Horizontal, Qt::DisplayRole).toString(), "Stream");
     EXPECT_EQ(model->headerData(PacketListModel::ColOffset, Qt::Horizontal, Qt::DisplayRole).toString(), "Offset");
@@ -181,4 +185,88 @@ TEST_F(PacketListModelTest, FilterByStream) {
 
     proxy.setStreamIndexFilter(-1);
     EXPECT_EQ(proxy.rowCount(), 3);
+}
+
+// ---- 帧类型相关测试 ----
+
+TEST_F(PacketListModelTest, FrameTypeStringStatic) {
+    // IDR I帧
+    EXPECT_EQ(PacketListModel::frameTypeString(AV_PICTURE_TYPE_I, true), "IDR");
+    // Non-IDR I帧
+    EXPECT_EQ(PacketListModel::frameTypeString(AV_PICTURE_TYPE_I, false), "I");
+    // P帧
+    EXPECT_EQ(PacketListModel::frameTypeString(AV_PICTURE_TYPE_P, false), "P");
+    // B帧
+    EXPECT_EQ(PacketListModel::frameTypeString(AV_PICTURE_TYPE_B, false), "B");
+    // 未知
+    EXPECT_TRUE(PacketListModel::frameTypeString(-1, false).isEmpty());
+    EXPECT_TRUE(PacketListModel::frameTypeString(0, false).isEmpty());
+}
+
+TEST_F(PacketListModelTest, FrameTypeColorStatic) {
+    // IDR 和 Non-IDR I帧颜色不同
+    QColor idrColor = PacketListModel::frameTypeColor(AV_PICTURE_TYPE_I, true);
+    QColor nonIdrColor = PacketListModel::frameTypeColor(AV_PICTURE_TYPE_I, false);
+    EXPECT_TRUE(idrColor.isValid());
+    EXPECT_TRUE(nonIdrColor.isValid());
+    EXPECT_NE(idrColor, nonIdrColor);
+
+    // P帧和 B帧颜色有效且不同
+    QColor pColor = PacketListModel::frameTypeColor(AV_PICTURE_TYPE_P, false);
+    QColor bColor = PacketListModel::frameTypeColor(AV_PICTURE_TYPE_B, false);
+    EXPECT_TRUE(pColor.isValid());
+    EXPECT_TRUE(bColor.isValid());
+    EXPECT_NE(pColor, bColor);
+
+    // 未知帧类型无颜色
+    QColor unknownColor = PacketListModel::frameTypeColor(-1, false);
+    EXPECT_FALSE(unknownColor.isValid());
+}
+
+TEST_F(PacketListModelTest, FrameColumnDisplayRole) {
+    QVector<PacketInfo> packets;
+    // IDR I帧
+    packets.append(makePacket(0, AVMEDIA_TYPE_VIDEO, "h264", 0, 1000, 0, AV_PKT_FLAG_KEY, 0,
+                              AV_PICTURE_TYPE_I, true));
+    // P帧
+    packets.append(makePacket(1, AVMEDIA_TYPE_VIDEO, "h264", 40, 500, 1000, 0, 0,
+                              AV_PICTURE_TYPE_P, false));
+    // B帧
+    packets.append(makePacket(2, AVMEDIA_TYPE_VIDEO, "h264", 80, 300, 1500, 0, 0,
+                              AV_PICTURE_TYPE_B, false));
+    // 音频（无帧类型）
+    packets.append(makePacket(3, AVMEDIA_TYPE_AUDIO, "aac", 0, 200, 1800, 0, 1));
+    model->setPackets(packets);
+
+    EXPECT_EQ(model->data(model->index(0, PacketListModel::ColFrame), Qt::DisplayRole).toString(), "IDR");
+    EXPECT_EQ(model->data(model->index(1, PacketListModel::ColFrame), Qt::DisplayRole).toString(), "P");
+    EXPECT_EQ(model->data(model->index(2, PacketListModel::ColFrame), Qt::DisplayRole).toString(), "B");
+    EXPECT_TRUE(model->data(model->index(3, PacketListModel::ColFrame), Qt::DisplayRole).toString().isEmpty());
+}
+
+TEST_F(PacketListModelTest, FrameColumnBackgroundRole) {
+    QVector<PacketInfo> packets;
+    packets.append(makePacket(0, AVMEDIA_TYPE_VIDEO, "h264", 0, 1000, 0, AV_PKT_FLAG_KEY, 0,
+                              AV_PICTURE_TYPE_I, true));
+    packets.append(makePacket(1, AVMEDIA_TYPE_VIDEO, "h264", 40, 500, 1000, 0, 0,
+                              AV_PICTURE_TYPE_P, false));
+    packets.append(makePacket(2, AVMEDIA_TYPE_VIDEO, "h264", 80, 300, 1500, 0, 0,
+                              AV_PICTURE_TYPE_B, false));
+    packets.append(makePacket(3, AVMEDIA_TYPE_AUDIO, "aac", 0, 200, 1800, 0, 1));
+    model->setPackets(packets);
+
+    // IDR I帧有背景色
+    QVariant idrBg = model->data(model->index(0, PacketListModel::ColFrame), Qt::BackgroundRole);
+    EXPECT_TRUE(idrBg.isValid());
+
+    // P帧有背景色
+    QVariant pBg = model->data(model->index(1, PacketListModel::ColFrame), Qt::BackgroundRole);
+    EXPECT_TRUE(pBg.isValid());
+
+    // IDR 和 P 颜色不同
+    EXPECT_NE(idrBg.value<QBrush>().color(), pBg.value<QBrush>().color());
+
+    // 音频无帧类型背景色
+    QVariant audioBg = model->data(model->index(3, PacketListModel::ColFrame), Qt::BackgroundRole);
+    EXPECT_FALSE(audioBg.isValid());
 }

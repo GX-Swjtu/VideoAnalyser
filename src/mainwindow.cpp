@@ -47,6 +47,12 @@ MainWindow::MainWindow(QWidget *parent)
 
     setAcceptDrops(true);
 
+    // 在所有子控件上安装事件过滤器，统一转发拖放事件到 MainWindow
+    const auto allChildren = findChildren<QWidget*>();
+    for (QWidget *child : allChildren) {
+        child->installEventFilter(this);
+    }
+
     setWindowTitle(QStringLiteral("VideoAnalyser"));
     resize(1200, 800);
 }
@@ -173,6 +179,29 @@ void MainWindow::dropEvent(QDropEvent *event)
             return; // 只处理第一个文件
         }
     }
+}
+
+bool MainWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    switch (event->type()) {
+    case QEvent::DragEnter: {
+        auto *e = static_cast<QDragEnterEvent*>(event);
+        dragEnterEvent(e);
+        return e->isAccepted();
+    }
+    case QEvent::DragMove:
+        // 已接受 DragEnter 后，必须接受 DragMove 才能接收 Drop
+        event->accept();
+        return true;
+    case QEvent::Drop: {
+        auto *e = static_cast<QDropEvent*>(event);
+        dropEvent(e);
+        return true;
+    }
+    default:
+        break;
+    }
+    return QMainWindow::eventFilter(watched, event);
 }
 
 void MainWindow::openFile()

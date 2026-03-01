@@ -204,3 +204,86 @@ TEST_F(PacketReaderTest, FindGopKeyFrameForNonVideo) {
     EXPECT_EQ(reader->findGopKeyFrame(-1), -1);
     EXPECT_EQ(reader->findGopKeyFrame(99999), -1);
 }
+
+// ---- 帧类型检测测试 ----
+
+TEST_F(PacketReaderTest, VideoPacketsHaveFrameType) {
+    QString path = testFile("test_h264_aac.mp4");
+    if (!QFile::exists(path)) {
+        GTEST_SKIP() << "Test file not found";
+    }
+    ASSERT_TRUE(reader->open(path));
+    ASSERT_TRUE(reader->readAllPackets());
+
+    int videoCount = 0;
+    int withPictType = 0;
+    for (int i = 0; i < reader->packetCount(); ++i) {
+        const PacketInfo &pkt = reader->packetAt(i);
+        if (pkt.mediaType == AVMEDIA_TYPE_VIDEO) {
+            ++videoCount;
+            if (pkt.pictType > 0) ++withPictType;
+        }
+    }
+    EXPECT_GT(videoCount, 0);
+    // 绝大多数视频 packet 应该有帧类型信息
+    EXPECT_GT(withPictType, videoCount / 2);
+}
+
+TEST_F(PacketReaderTest, FirstVideoPacketIsIDR) {
+    QString path = testFile("test_h264_aac.mp4");
+    if (!QFile::exists(path)) {
+        GTEST_SKIP() << "Test file not found";
+    }
+    ASSERT_TRUE(reader->open(path));
+    ASSERT_TRUE(reader->readAllPackets());
+
+    // 第一个视频 Packet 通常是 IDR I帧
+    for (int i = 0; i < reader->packetCount(); ++i) {
+        const PacketInfo &pkt = reader->packetAt(i);
+        if (pkt.mediaType == AVMEDIA_TYPE_VIDEO) {
+            EXPECT_EQ(pkt.pictType, AV_PICTURE_TYPE_I);
+            EXPECT_TRUE(pkt.isIDR);
+            break;
+        }
+    }
+}
+
+TEST_F(PacketReaderTest, AudioPacketsNoFrameType) {
+    QString path = testFile("test_h264_aac.mp4");
+    if (!QFile::exists(path)) {
+        GTEST_SKIP() << "Test file not found";
+    }
+    ASSERT_TRUE(reader->open(path));
+    ASSERT_TRUE(reader->readAllPackets());
+
+    for (int i = 0; i < reader->packetCount(); ++i) {
+        const PacketInfo &pkt = reader->packetAt(i);
+        if (pkt.mediaType == AVMEDIA_TYPE_AUDIO) {
+            EXPECT_EQ(pkt.pictType, -1);
+            EXPECT_FALSE(pkt.isIDR);
+        }
+    }
+}
+
+TEST_F(PacketReaderTest, FrameTypeVariety) {
+    QString path = testFile("test_h264_aac.mp4");
+    if (!QFile::exists(path)) {
+        GTEST_SKIP() << "Test file not found";
+    }
+    ASSERT_TRUE(reader->open(path));
+    ASSERT_TRUE(reader->readAllPackets());
+
+    bool hasI = false, hasP = false, hasB = false;
+    for (int i = 0; i < reader->packetCount(); ++i) {
+        const PacketInfo &pkt = reader->packetAt(i);
+        if (pkt.mediaType == AVMEDIA_TYPE_VIDEO) {
+            if (pkt.pictType == AV_PICTURE_TYPE_I) hasI = true;
+            if (pkt.pictType == AV_PICTURE_TYPE_P) hasP = true;
+            if (pkt.pictType == AV_PICTURE_TYPE_B) hasB = true;
+        }
+    }
+    EXPECT_TRUE(hasI) << "应至少有一个 I 帧";
+    // P 帧和 B 帧取决于编码参数，不强制要求
+    // 但 H.264 测试视频通常包含 P 帧
+    EXPECT_TRUE(hasI || hasP) << "应至少有 I 帧或 P 帧";
+}

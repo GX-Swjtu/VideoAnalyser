@@ -29,6 +29,8 @@ struct PacketInfo {
     int64_t duration;         // 持续时间（time_base 单位）
     double durationTime;      // 持续时间（秒）
     int gopKeyFrameIndex;     // 所属 GOP 的关键帧在全局列表中的序号（视频流用）
+    int pictType = -1;        // 帧类型：AV_PICTURE_TYPE_I/P/B 等，-1 表示未知（非视频或未解析）
+    bool isIDR = false;       // 是否为 IDR 帧（仅 H.264/H.265 视频有意义）
 };
 
 // 流信息

@@ -131,5 +131,12 @@ TEST(AboutDialogTest, DialogCreation)
     // 构造不崩溃（会触发网络请求，测试环境下会超时/失败但静默处理）
     AboutDialog dlg;
     EXPECT_TRUE(dlg.windowTitle().contains(QStringLiteral("关于")));
-    EXPECT_GE(dlg.width(), 520);
+    EXPECT_GE(dlg.minimumWidth(), 520);
+}
+
+TEST(AboutDialogTest, DialogAutoSizeMinimumHeight)
+{
+    AboutDialog dlg;
+    // 最小高度应为 300（不再是 560 的固定高度）
+    EXPECT_LE(dlg.minimumHeight(), 300);
 }

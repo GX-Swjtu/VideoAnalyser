@@ -20,6 +20,8 @@
 #include <QUrl>
 #include <QClipboard>
 #include <QApplication>
+#include <QShowEvent>
+#include <QScreen>
 
 extern "C" {
 #include <libavutil/avutil.h>
@@ -155,8 +157,7 @@ AboutDialog::AboutDialog(QWidget *parent)
 {
     setWindowTitle(QStringLiteral("关于 VideoAnalyser"));
     setAttribute(Qt::WA_DeleteOnClose);
-    setMinimumSize(520, 560);
-    resize(520, 560);
+    setMinimumSize(520, 300);
 
     m_networkManager = new QNetworkAccessManager(this);
 
@@ -203,11 +204,11 @@ void AboutDialog::setupUI()
     mainLayout->addWidget(iconLabel);
 
     // 使用 QTextBrowser 作为主体内容区域（支持富文本 + 鼠标选中复制）
-    auto *browser = new QTextBrowser();
-    browser->setOpenExternalLinks(true);
-    browser->setFrameShape(QFrame::NoFrame);
-    browser->setReadOnly(true);
-    browser->setStyleSheet(QStringLiteral(
+    m_browser = new QTextBrowser();
+    m_browser->setOpenExternalLinks(true);
+    m_browser->setFrameShape(QFrame::NoFrame);
+    m_browser->setReadOnly(true);
+    m_browser->setStyleSheet(QStringLiteral(
         "QTextBrowser { background: transparent; selection-background-color: palette(highlight); }"));
 
     // ---- 组装 HTML ----
@@ -263,8 +264,8 @@ void AboutDialog::setupUI()
         "</div>"
     ).arg(versionTable, envTable);
 
-    browser->setHtml(html);
-    mainLayout->addWidget(browser, 1);
+    m_browser->setHtml(html);
+    mainLayout->addWidget(m_browser, 1);
 
     // ---- 更新检查状态行（在 browser 外部，独立 widget） ----
     auto *updateRow = new QHBoxLayout();
@@ -354,6 +355,10 @@ void AboutDialog::onUpdateCheckFinished(QNetworkReply *reply)
     reply->deleteLater();
     m_spinnerTimer->stop();
 
+    // 重新调整尺寸（更新检查文字变化后可能需要更多空间）
+    m_sizeAdjusted = false;
+    adjustSizeToContent();
+
     // 任何错误（含超时 abort）→ 显示失败提示
     if (reply->error() != QNetworkReply::NoError) {
         m_updateIconLabel->setText(QStringLiteral("❌"));
@@ -394,4 +399,37 @@ void AboutDialog::onUpdateCheckFinished(QNetworkReply *reply)
         m_updateTextLabel->setStyleSheet(QStringLiteral("color: green;"));
         m_updateTextLabel->setText(QStringLiteral("已是最新版本"));
     }
+}
+
+// ============================================
+// 自适应尺寸
+// ============================================
+
+void AboutDialog::showEvent(QShowEvent *event)
+{
+    QDialog::showEvent(event);
+    if (!m_sizeAdjusted) {
+        // 延迟一帧执行，确保 layout 和 document 渲染完成
+        QTimer::singleShot(0, this, &AboutDialog::adjustSizeToContent);
+    }
+}
+
+void AboutDialog::adjustSizeToContent()
+{
+    if (!m_browser || m_sizeAdjusted) return;
+    m_sizeAdjusted = true;
+
+    // 根据当前视口宽度计算文档理想高度
+    m_browser->document()->setTextWidth(m_browser->viewport()->width());
+    int docHeight = static_cast<int>(m_browser->document()->size().height());
+
+    // 除 browser 外其他控件和边距的总高度
+    int overhead = height() - m_browser->height();
+    int totalHeight = docHeight + overhead + 20; // 20px 额外余量
+
+    // 限制为屏幕可用高度的 85%
+    auto *scr = screen();
+    int maxH = scr ? static_cast<int>(scr->availableGeometry().height() * 0.85) : 900;
+
+    resize(width(), qBound(minimumHeight(), totalHeight, maxH));
 }
