@@ -112,12 +112,11 @@ jobs:
             }
           }
           Copy-Item "LICENSE" "$dir/" -ErrorAction SilentlyContinue
-          Compress-Archive -Path "$dir/*" -DestinationPath "${dir}.zip"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: win-mingw-dynamic
-          path: VideoAnalyser-*-windows-mingw-x64.zip
+          name: VideoAnalyser-${{ github.ref_name }}-windows-mingw-x64
+          path: VideoAnalyser-${{ github.ref_name }}-windows-mingw-x64/
 
   # ── 2. Windows MSVC 动态链接 ──────────────────────────
   win-msvc:
@@ -192,12 +191,11 @@ jobs:
             if (Test-Path "$buildDir/$sub") { Copy-Item -Recurse "$buildDir/$sub" "$dir/" }
           }
           Copy-Item "LICENSE" "$dir/" -ErrorAction SilentlyContinue
-          Compress-Archive -Path "$dir/*" -DestinationPath "${dir}.zip"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: win-msvc-dynamic
-          path: VideoAnalyser-*-windows-msvc-x64.zip
+          name: VideoAnalyser-${{ github.ref_name }}-windows-msvc-x64
+          path: VideoAnalyser-${{ github.ref_name }}-windows-msvc-x64/
 
   # ── 3. Windows MinGW 静态单文件 ──────────────────────
   win-mingw-static:
@@ -284,12 +282,11 @@ jobs:
           New-Item -ItemType Directory -Force $dir | Out-Null
           Copy-Item "build/windows-static/VideoAnalyser.exe" "$dir/"
           Copy-Item "LICENSE" "$dir/" -ErrorAction SilentlyContinue
-          Compress-Archive -Path "$dir/*" -DestinationPath "${dir}.zip"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: win-mingw-static
-          path: VideoAnalyser-*-windows-mingw-x64-static.zip
+          name: VideoAnalyser-${{ github.ref_name }}-windows-mingw-x64-static
+          path: VideoAnalyser-${{ github.ref_name }}-windows-mingw-x64-static/
 
   # ── 4. Windows MSVC 静态单文件 ───────────────────────
   win-msvc-static:
@@ -358,12 +355,11 @@ jobs:
           New-Item -ItemType Directory -Force $dir | Out-Null
           Copy-Item "build/windows-msvc-static/VideoAnalyser.exe" "$dir/"
           Copy-Item "LICENSE" "$dir/" -ErrorAction SilentlyContinue
-          Compress-Archive -Path "$dir/*" -DestinationPath "${dir}.zip"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: win-msvc-static
-          path: VideoAnalyser-*-windows-msvc-x64-static.zip
+          name: VideoAnalyser-${{ github.ref_name }}-windows-msvc-x64-static
+          path: VideoAnalyser-${{ github.ref_name }}-windows-msvc-x64-static/
 
   # ── 5. Linux GCC 动态链接 ─────────────────────────────
   linux-gcc:
@@ -484,12 +480,11 @@ jobs:
           chmod +x "$dir/VideoAnalyser.sh"
 
           cp LICENSE "$dir/" 2>/dev/null || true
-          tar czf "${dir}.tar.gz" "$dir"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-gcc-dynamic
-          path: VideoAnalyser-*-linux-gcc-x64.tar.gz
+          name: VideoAnalyser-${{ github.ref_name }}-linux-gcc-x64
+          path: VideoAnalyser-${{ github.ref_name }}-linux-gcc-x64/
 
   # ── 6. Linux GCC 静态单文件 ──────────────────────────
   linux-gcc-static:
@@ -589,12 +584,11 @@ jobs:
           mkdir -p "$dir"
           cp build/linux-static/VideoAnalyser "$dir/"
           cp LICENSE "$dir/" 2>/dev/null || true
-          tar czf "${dir}.tar.gz" "$dir"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-gcc-static
-          path: VideoAnalyser-*-linux-gcc-x64-static.tar.gz
+          name: VideoAnalyser-${{ github.ref_name }}-linux-gcc-x64-static
+          path: VideoAnalyser-${{ github.ref_name }}-linux-gcc-x64-static/
 
   # ── 7. macOS Clang 动态链接 ───────────────────────────
   macos-clang:
@@ -781,7 +775,21 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release
-          find artifacts -type f \( -name '*.zip' -o -name '*.tar.gz' \) -exec cp {} release/ \;
+          cd artifacts
+          for d in */; do
+            name="${d%/}"
+            # macOS: DMG 文件直接复制
+            if ls "${d}"*.dmg 1>/dev/null 2>&1; then
+              cp "${d}"*.dmg ../release/
+            # Linux: 创建 tar.gz（包含顶层目录）
+            elif [[ "$name" == *linux* ]]; then
+              tar czf "../release/${name}.tar.gz" "$name"
+            # Windows: 创建 zip（文件在根层级）
+            else
+              (cd "$name" && zip -r "../../release/${name}.zip" .)
+            fi
+          done
+          cd ..
           echo "=== Release assets ==="
           ls -lh release/
 
