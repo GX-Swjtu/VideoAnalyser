@@ -15,17 +15,10 @@
                 "swscale",
 
                 "dav1d",
-                "opus",
-                "vorbis",
-                "theora",
-                "openh264",
-                "openjpeg",
-                "mp3lame",
 
                 "bzip2",
                 "zlib",
-                "iconv",
-                "xml2"
+                "iconv"
             ]
         },
         "gtest"
