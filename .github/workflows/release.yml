@@ -1,6 +1,6 @@
 # ============================================
 # Release 工作流：push tag (v*) 时自动构建并发布
-# 生成 12 个变体的发行资产：
+# 生成 11 个变体的发行资产：
 #   1.  Windows MinGW Release 动态链接压缩包
 #   2.  Windows MSVC  Release 动态链接压缩包
 #   3.  Windows MinGW Release 静态单文件
@@ -12,7 +12,6 @@
 #   9.  Windows MinGW Release 静态单文件 + UPX 压缩
 #   10. Windows MSVC  Release 静态单文件 + UPX 压缩
 #   11. Linux   GCC   Release 静态单文件 + UPX 压缩
-#   12. macOS   Clang Release 静态单文件 + UPX 压缩（Apple Silicon）
 # ============================================
 name: Release
 
@@ -820,33 +819,6 @@ jobs:
         with:
           name: macos-clang-static
           path: VideoAnalyser-*-macos-arm64-static.dmg
-
-      - name: Install UPX
-        run: brew install upx
-
-      - name: Package (UPX)
-        run: |
-          version="${{ github.ref_name }}"
-          dir="VideoAnalyser-${version}-macos-arm64-static-upx"
-          mkdir -p "$dir"
-          cp -R build/macos-static/VideoAnalyser.app "$dir/"
-          app_bin="$dir/VideoAnalyser.app/Contents/MacOS/VideoAnalyser"
-          orig_size=$(stat -f%z "$app_bin")
-          upx --best "$app_bin"
-          compressed_size=$(stat -f%z "$app_bin")
-          echo "UPX: $(echo "scale=2; $orig_size / 1048576" | bc) MB -> $(echo "scale=2; $compressed_size / 1048576" | bc) MB"
-          cp LICENSE "$dir/" 2>/dev/null || true
-          # 创建 DMG
-          mkdir -p dmg_staging_upx
-          cp -R "$dir/VideoAnalyser.app" dmg_staging_upx/
-          ln -s /Applications dmg_staging_upx/Applications
-          hdiutil create -volname "VideoAnalyser" -srcfolder dmg_staging_upx \
-            -ov -format UDZO "${dir}.dmg"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: macos-clang-static-upx
-          path: VideoAnalyser-*-macos-arm64-static-upx.dmg
 
   # ── 创建 GitHub Release ──────────────────────────────
   release:
