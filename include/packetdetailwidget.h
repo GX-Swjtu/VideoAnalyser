@@ -8,6 +8,12 @@
 
 #include "audiowaveformwidget.h" // AudioData
 
+// 视频解码结果（异步传回 图像 + 错误信息）
+struct VideoDecodeResult {
+    QImage image;
+    QString error;
+};
+
 class PacketReader;
 class PacketDecoder;
 class QTreeWidget;
@@ -53,7 +59,7 @@ private:
     QSplitter *m_splitter = nullptr;
 
     // 异步解码
-    QFutureWatcher<QImage> *m_videoWatcher = nullptr;
+    QFutureWatcher<VideoDecodeResult> *m_videoWatcher = nullptr;
     QFutureWatcher<AudioData> *m_audioWatcher = nullptr;
 
     // 解码结果接收控件（由异步回调更新）

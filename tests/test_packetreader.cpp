@@ -205,6 +205,95 @@ TEST_F(PacketReaderTest, FindGopKeyFrameForNonVideo) {
     EXPECT_EQ(reader->findGopKeyFrame(99999), -1);
 }
 
+// ---- findPrevGopKeyFrame 测试 ----
+
+TEST_F(PacketReaderTest, FindPrevGopKeyFrame) {
+    QString path = testFile("test_h264_aac.mp4");
+    if (!QFile::exists(path)) {
+        GTEST_SKIP() << "Test file not found";
+    }
+    ASSERT_TRUE(reader->open(path));
+    ASSERT_TRUE(reader->readAllPackets());
+
+    // 收集视频流的所有关键帧索引
+    int videoStreamIdx = -1;
+    QVector<int> keyFrameIndices;
+    for (int i = 0; i < reader->packetCount(); ++i) {
+        const PacketInfo &pkt = reader->packetAt(i);
+        if (pkt.mediaType == AVMEDIA_TYPE_VIDEO) {
+            if (videoStreamIdx < 0) videoStreamIdx = pkt.streamIndex;
+            if (pkt.flags & AV_PKT_FLAG_KEY) {
+                keyFrameIndices.append(i);
+            }
+        }
+    }
+    ASSERT_GE(videoStreamIdx, 0);
+    ASSERT_GE(keyFrameIndices.size(), 1);
+
+    // 第一个关键帧没有前一个关键帧
+    EXPECT_EQ(reader->findPrevGopKeyFrame(videoStreamIdx, keyFrameIndices[0]), -1);
+
+    // 如果有第二个关键帧，其前一个应该是第一个
+    if (keyFrameIndices.size() >= 2) {
+        EXPECT_EQ(reader->findPrevGopKeyFrame(videoStreamIdx, keyFrameIndices[1]), keyFrameIndices[0]);
+    }
+
+    // 如果有第三个关键帧，其前一个应该是第二个
+    if (keyFrameIndices.size() >= 3) {
+        EXPECT_EQ(reader->findPrevGopKeyFrame(videoStreamIdx, keyFrameIndices[2]), keyFrameIndices[1]);
+    }
+}
+
+TEST_F(PacketReaderTest, FindPrevGopKeyFrameInvalidStream) {
+    // 无效流索引应返回 -1
+    EXPECT_EQ(reader->findPrevGopKeyFrame(-1, 0), -1);
+    EXPECT_EQ(reader->findPrevGopKeyFrame(999, 0), -1);
+}
+
+TEST_F(PacketReaderTest, FindPrevGopKeyFrameNotAffectedByAudioPackets) {
+    QString path = testFile("test_h264_aac.mp4");
+    if (!QFile::exists(path)) {
+        GTEST_SKIP() << "Test file not found";
+    }
+    ASSERT_TRUE(reader->open(path));
+    ASSERT_TRUE(reader->readAllPackets());
+
+    // 找到第二个视频关键帧
+    int videoStreamIdx = -1;
+    QVector<int> keyFrameIndices;
+    for (int i = 0; i < reader->packetCount(); ++i) {
+        const PacketInfo &pkt = reader->packetAt(i);
+        if (pkt.mediaType == AVMEDIA_TYPE_VIDEO) {
+            if (videoStreamIdx < 0) videoStreamIdx = pkt.streamIndex;
+            if (pkt.flags & AV_PKT_FLAG_KEY) {
+                keyFrameIndices.append(i);
+            }
+        }
+    }
+    if (keyFrameIndices.size() < 2) {
+        GTEST_SKIP() << "Need at least 2 keyframes for this test";
+    }
+
+    int secondKeyFrame = keyFrameIndices[1];
+
+    // 验证 findPrevGopKeyFrame 正确返回第一个关键帧
+    // （即使 secondKeyFrame-1 是音频包也不受影响）
+    int prev = reader->findPrevGopKeyFrame(videoStreamIdx, secondKeyFrame);
+    EXPECT_EQ(prev, keyFrameIndices[0]);
+
+    // 对比：旧的 findGopKeyFrame(secondKeyFrame-1) 方法
+    // 如果 secondKeyFrame-1 是音频包，它会返回 -1（这正是之前的 bug）
+    if (secondKeyFrame > 0) {
+        const PacketInfo &prevPkt = reader->packetAt(secondKeyFrame - 1);
+        if (prevPkt.mediaType != AVMEDIA_TYPE_VIDEO) {
+            // 旧方法会失败
+            EXPECT_EQ(reader->findGopKeyFrame(secondKeyFrame - 1), -1);
+            // 新方法不受影响
+            EXPECT_EQ(reader->findPrevGopKeyFrame(videoStreamIdx, secondKeyFrame), keyFrameIndices[0]);
+        }
+    }
+}
+
 // ---- 帧类型检测测试 ----
 
 TEST_F(PacketReaderTest, VideoPacketsHaveFrameType) {

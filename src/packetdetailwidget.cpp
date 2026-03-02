@@ -181,17 +181,18 @@ void PacketDetailWidget::buildContentTabs(PacketReader *reader, int packetIndex)
         auto decoder = std::make_shared<PacketDecoder>(reader);
         int idx = packetIndex;
 
-        m_videoWatcher = new QFutureWatcher<QImage>(this);
-        connect(m_videoWatcher, &QFutureWatcher<QImage>::finished,
+        m_videoWatcher = new QFutureWatcher<VideoDecodeResult>(this);
+        connect(m_videoWatcher, &QFutureWatcher<VideoDecodeResult>::finished,
                 this, &PacketDetailWidget::onVideoDecoded);
 
-        QFuture<QImage> future = QtConcurrent::run([decoder, idx]() -> QImage {
-            QString err;
-            if (!decoder->open(&err)) {
-                qWarning() << "PacketDecoder open failed:" << err;
-                return QImage();
+        QFuture<VideoDecodeResult> future = QtConcurrent::run([decoder, idx]() -> VideoDecodeResult {
+            VideoDecodeResult res;
+            if (!decoder->open(&res.error)) {
+                qWarning() << "PacketDecoder open failed:" << res.error;
+                return res;
             }
-            return decoder->decodeVideoPacket(idx, nullptr);
+            res.image = decoder->decodeVideoPacket(idx, &res.error);
+            return res;
         });
         m_videoWatcher->setFuture(future);
     }
@@ -257,11 +258,14 @@ void PacketDetailWidget::onVideoDecoded()
 {
     if (!m_videoWatcher || !m_imageLabel) return;
 
-    QImage frame = m_videoWatcher->result();
-    if (!frame.isNull()) {
-        m_imageLabel->setOriginalImage(frame);
+    VideoDecodeResult res = m_videoWatcher->result();
+    if (!res.image.isNull()) {
+        m_imageLabel->setOriginalImage(res.image);
     } else {
-        m_imageLabel->setText(QStringLiteral("解码失败"));
+        QString msg = QStringLiteral("解码失败");
+        if (!res.error.isEmpty())
+            msg += QStringLiteral(": %1").arg(res.error);
+        m_imageLabel->setText(msg);
     }
 }
 

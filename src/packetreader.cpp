@@ -369,3 +369,19 @@ int PacketReader::findGopKeyFrame(int packetIndex) const
     --ub;
     return *ub;
 }
+
+int PacketReader::findPrevGopKeyFrame(int streamIndex, int currentKeyFrameIndex) const
+{
+    auto it = m_keyFrameIndices.find(streamIndex);
+    if (it == m_keyFrameIndices.end() || it->isEmpty())
+        return -1;
+
+    const auto &kfList = it.value();
+    // 在关键帧列表中找到 currentKeyFrameIndex 的位置
+    auto lb = std::lower_bound(kfList.begin(), kfList.end(), currentKeyFrameIndex);
+    if (lb == kfList.begin())
+        return -1; // 已经是第一个关键帧，没有更早的
+
+    --lb;
+    return *lb;
+}

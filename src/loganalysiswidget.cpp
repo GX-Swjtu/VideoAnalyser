@@ -263,7 +263,7 @@ void LogAnalysisWidget::installCallback()
 {
     if (s_callbackInstalled) return;
     s_callbackInstalled = true;
-    av_log_set_level(AV_LOG_INFO);
+    av_log_set_level(AV_LOG_VERBOSE);
     av_log_set_callback(ffmpegLogCallback);
 }
 
@@ -277,8 +277,8 @@ QVector<LogEntry> LogAnalysisWidget::takePendingEntries()
 
 void LogAnalysisWidget::ffmpegLogCallback(void *ptr, int level, const char *fmt, va_list vl)
 {
-    // 捕获 INFO 及以上级别（不含 VERBOSE/DEBUG/TRACE，避免过多）
-    if (level > AV_LOG_INFO) return;
+    // 捕获 VERBOSE 及以上级别（含 WARNING/ERROR/INFO/VERBOSE，便于调试 VVC 解码问题）
+    if (level > AV_LOG_VERBOSE) return;
 
     // 格式化消息
     char line[1024];

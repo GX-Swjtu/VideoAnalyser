@@ -6,6 +6,7 @@ extern "C" {
 #include <libavutil/imgutils.h>
 #include <libavutil/error.h>
 #include <libavutil/channel_layout.h>
+#include <libavutil/log.h>
 #include <libswscale/swscale.h>
 #include <libswresample/swresample.h>
 }
@@ -96,12 +97,20 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
 
     const StreamInfo &streamInfo = m_reader->streams()[targetPkt.streamIndex];
 
+    av_log(NULL, AV_LOG_WARNING, "[VDecode] === START === pktIdx=%d codec=%s codec_id=%d targetPTS=%lld targetDTS=%lld flags=%d gopKeyFrame=%d\n",
+           packetIndex, streamInfo.codecName.toUtf8().constData(),
+           streamInfo.codecpar->codec_id,
+           (long long)targetPkt.pts, (long long)targetPkt.dts,
+           targetPkt.flags, targetPkt.gopKeyFrameIndex);
+
     // 找到解码器
     const AVCodec *codec = avcodec_find_decoder(streamInfo.codecpar->codec_id);
     if (!codec) {
+        av_log(NULL, AV_LOG_ERROR, "[VDecode] FAIL: avcodec_find_decoder returned NULL for codec_id=%d\n", streamInfo.codecpar->codec_id);
         if (errorMsg) *errorMsg = QStringLiteral("Decoder not found for codec: %1").arg(streamInfo.codecName);
         return QImage();
     }
+    av_log(NULL, AV_LOG_WARNING, "[VDecode] Found decoder: %s (%s)\n", codec->name, codec->long_name);
 
     AVCodecContext *codecCtx = avcodec_alloc_context3(codec);
     if (!codecCtx) {
@@ -111,19 +120,24 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
 
     int ret = avcodec_parameters_to_context(codecCtx, streamInfo.codecpar);
     if (ret < 0) {
+        av_log(NULL, AV_LOG_ERROR, "[VDecode] FAIL: avcodec_parameters_to_context: %s\n", ffmpegError(ret).toUtf8().constData());
         if (errorMsg) *errorMsg = QStringLiteral("Failed to copy codec params: %1").arg(ffmpegError(ret));
         avcodec_free_context(&codecCtx);
         return QImage();
     }
+    av_log(NULL, AV_LOG_WARNING, "[VDecode] codecCtx: w=%d h=%d pix_fmt=%d extradata_size=%d\n",
+           codecCtx->width, codecCtx->height, codecCtx->pix_fmt, codecCtx->extradata_size);
 
     codecCtx->pkt_timebase = streamInfo.timeBase;
 
     ret = avcodec_open2(codecCtx, codec, nullptr);
     if (ret < 0) {
+        av_log(NULL, AV_LOG_ERROR, "[VDecode] FAIL: avcodec_open2: %s\n", ffmpegError(ret).toUtf8().constData());
         if (errorMsg) *errorMsg = QStringLiteral("Failed to open decoder: %1").arg(ffmpegError(ret));
         avcodec_free_context(&codecCtx);
         return QImage();
     }
+    av_log(NULL, AV_LOG_WARNING, "[VDecode] Decoder opened OK\n");
 
     // 找到 GOP 起始关键帧
     int gopStart = m_reader->findGopKeyFrame(packetIndex);
@@ -131,17 +145,70 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
 
     const PacketInfo &gopPkt = m_reader->packetAt(gopStart);
 
-    // Seek 到关键帧位置（复用 m_fmtCtx）
-    int64_t seekTs = (gopPkt.dts != AV_NOPTS_VALUE) ? gopPkt.dts : gopPkt.pts;
-    if (seekTs == AV_NOPTS_VALUE) seekTs = 0;
+    // 针对 "leading picture" 场景：目标帧在显示顺序上早于 GOP 关键帧
+    // （如 VVC/HEVC 层级 B 帧结构，关键帧的 PTS 大于前面 B 帧的 PTS）。
+    // 解码器在 seek / flush 后会跳过 RASL 帧，需从更早的关键帧开始解码。
+    bool isLeadingPicture = (targetPkt.pts != AV_NOPTS_VALUE &&
+                             gopPkt.pts != AV_NOPTS_VALUE &&
+                             targetPkt.pts < gopPkt.pts);
+    bool isFirstGopLeading = false; // 首 GOP leading picture（VVC RASL/RADL 帧，无更早关键帧可回退）
 
-    ret = av_seek_frame(m_fmtCtx, targetPkt.streamIndex, seekTs, AVSEEK_FLAG_BACKWARD);
+    if (isLeadingPicture) {
+        bool canFallBack = false;
+        if (gopStart > 0) {
+            // 使用 findPrevGopKeyFrame 直接在关键帧列表中查找前一个关键帧，
+            // 避免 findGopKeyFrame(gopStart-1) 因相邻 packet 是音频包而返回 -1 的问题。
+            int prevGopStart = m_reader->findPrevGopKeyFrame(targetPkt.streamIndex, gopStart);
+            if (prevGopStart >= 0 && prevGopStart < gopStart) {
+                av_log(NULL, AV_LOG_WARNING,
+                       "[VDecode] Leading picture detected (targetPTS=%lld < gopPTS=%lld), using prev GOP keyframe %d -> %d\n",
+                       (long long)targetPkt.pts, (long long)gopPkt.pts, gopStart, prevGopStart);
+                gopStart = prevGopStart;
+                canFallBack = true;
+            }
+        }
+        if (!canFallBack) {
+            // 首 GOP leading picture：VVC/HEVC 流的起始帧不是 IDR 而是 B 帧的情况。
+            // 这些帧（RASL/RADL）在显示顺序上早于首个关键帧（CRA/IDR），
+            // 无更早的关键帧可回退。需要从文件最开头开始解码，
+            // 并清除 DISCARD 标志以尝试让解码器输出这些帧。
+            isFirstGopLeading = true;
+            av_log(NULL, AV_LOG_WARNING,
+                   "[VDecode] First-GOP leading picture: targetPTS=%lld < keyframePTS=%lld, gopStart=%d, no earlier keyframe available\n",
+                   (long long)targetPkt.pts, (long long)gopPkt.pts, gopStart);
+        }
+    }
+
+    const PacketInfo &seekPkt = m_reader->packetAt(gopStart);
+
+    // Seek 到关键帧位置（复用 m_fmtCtx）
+    int64_t seekTs;
+    if (isFirstGopLeading) {
+        // 首 GOP leading picture：使用 avformat_seek_file 精确 seek 到流最开头，
+        // 确保从第一个 packet（通常是 IDR/CRA）开始读取。
+        // 避免因 DTS 为负值（如 VVC 的 CRA DTS=-1004）导致 seek 定位异常。
+        int64_t startTs = (m_fmtCtx->start_time != AV_NOPTS_VALUE) ? m_fmtCtx->start_time : 0;
+        seekTs = startTs;
+        ret = avformat_seek_file(m_fmtCtx, -1, INT64_MIN, startTs, startTs, 0);
+        av_log(NULL, AV_LOG_WARNING,
+               "[VDecode] First-GOP seek to start: startTs=%lld ret=%d\n",
+               (long long)startTs, ret);
+    } else {
+        seekTs = (seekPkt.dts != AV_NOPTS_VALUE) ? seekPkt.dts : seekPkt.pts;
+        if (seekTs == AV_NOPTS_VALUE) seekTs = 0;
+        ret = av_seek_frame(m_fmtCtx, targetPkt.streamIndex, seekTs, AVSEEK_FLAG_BACKWARD);
+    }
+
+    av_log(NULL, AV_LOG_WARNING, "[VDecode] GOP seek: gopStart=%d seekTs=%lld streamIndex=%d isLeading=%d isFirstGopLeading=%d\n",
+           gopStart, (long long)seekTs, targetPkt.streamIndex, isLeadingPicture ? 1 : 0, isFirstGopLeading ? 1 : 0);
+
     if (ret < 0) {
-        // 尝试 seek 到文件开头
+        av_log(NULL, AV_LOG_WARNING, "[VDecode] seek failed: %s, trying seek to 0\n", ffmpegError(ret).toUtf8().constData());
         av_seek_frame(m_fmtCtx, -1, 0, AVSEEK_FLAG_BACKWARD);
     }
 
-    avcodec_flush_buffers(codecCtx);
+    // 注意：不调用 avcodec_flush_buffers — codecCtx 刚刚 open，无需 flush。
+    // 对 VVC/HEVC 解码器，flush 会触发 RASL 帧跳过机制，导致 leading picture 无法输出。
 
     // 连续读取直到找到目标帧
     AVPacket *pkt = av_packet_alloc();
@@ -151,54 +218,97 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
     bool found = false;
     int maxPackets = 5000; // 防止无限循环
 
+    int sendOkCount = 0, sendFailCount = 0;
+    int recvOkCount = 0, recvEagainCount = 0, recvEofCount = 0, recvErrCount = 0;
+    int readPktCount = 0;
+    int64_t lastRecvPts = AV_NOPTS_VALUE; // 记录最后一个解码出的帧 PTS
+
+    // 最近帧兜底：记录与目标 PTS 差值最小的帧，用于 PTS 不精确匹配时的兜底
+    QImage closestImage;
+    int64_t closestDelta = INT64_MAX;
+    int64_t closestPts = AV_NOPTS_VALUE;
+
+    // 将解码帧转为 QImage 的辅助函数
+    auto frameToImage = [&](AVFrame *frm) -> QImage {
+        int w = frm->width;
+        int h = frm->height;
+        AVPixelFormat srcFmt = static_cast<AVPixelFormat>(frm->format);
+
+        // 复用或重建 SwsContext
+        if (m_swsCtx && (m_swsWidth != w || m_swsHeight != h || m_swsSrcFmt != srcFmt)) {
+            sws_freeContext(m_swsCtx);
+            m_swsCtx = nullptr;
+        }
+        if (!m_swsCtx) {
+            m_swsCtx = sws_getContext(
+                w, h, srcFmt,
+                w, h, AV_PIX_FMT_RGB24,
+                SWS_BILINEAR, nullptr, nullptr, nullptr);
+            m_swsWidth = w;
+            m_swsHeight = h;
+            m_swsSrcFmt = srcFmt;
+        }
+        if (!m_swsCtx) return QImage();
+
+        AVFrame *rgbFrame = av_frame_alloc();
+        rgbFrame->format = AV_PIX_FMT_RGB24;
+        rgbFrame->width = w;
+        rgbFrame->height = h;
+        av_frame_get_buffer(rgbFrame, 0);
+
+        sws_scale(m_swsCtx, frm->data, frm->linesize, 0, h,
+                  rgbFrame->data, rgbFrame->linesize);
+
+        QImage img(rgbFrame->data[0], rgbFrame->width, rgbFrame->height,
+                   rgbFrame->linesize[0], QImage::Format_RGB888);
+        QImage copy = img.copy(); // 深拷贝
+        av_frame_free(&rgbFrame);
+        return copy;
+    };
+
     // 辅助 lambda：从解码器接收帧并匹配目标 PTS
     auto drainFrames = [&]() {
         while (!found) {
             ret = avcodec_receive_frame(codecCtx, frame);
-            if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) break;
-            if (ret < 0) break;
+            if (ret == AVERROR(EAGAIN)) { recvEagainCount++; break; }
+            if (ret == AVERROR_EOF) { recvEofCount++; break; }
+            if (ret < 0) {
+                recvErrCount++;
+                av_log(NULL, AV_LOG_WARNING, "[VDecode] avcodec_receive_frame error: %s\n",
+                       ffmpegError(ret).toUtf8().constData());
+                break;
+            }
+            recvOkCount++;
+            lastRecvPts = frame->pts;
 
-            // PTS 匹配
-            if (frame->pts == targetPkt.pts) {
-                int w = frame->width;
-                int h = frame->height;
-                AVPixelFormat srcFmt = static_cast<AVPixelFormat>(frame->format);
+            // 获取 best_effort_timestamp（某些解码器如 VVC 的 frame->pts 不一定与包 PTS 一致）
+            int64_t bet = frame->best_effort_timestamp;
 
-                // 复用或重建 SwsContext
-                if (m_swsCtx && (m_swsWidth != w || m_swsHeight != h || m_swsSrcFmt != srcFmt)) {
-                    sws_freeContext(m_swsCtx);
-                    m_swsCtx = nullptr;
-                }
-                if (!m_swsCtx) {
-                    m_swsCtx = sws_getContext(
-                        w, h, srcFmt,
-                        w, h, AV_PIX_FMT_RGB24,
-                        SWS_BILINEAR, nullptr, nullptr, nullptr);
-                    m_swsWidth = w;
-                    m_swsHeight = h;
-                    m_swsSrcFmt = srcFmt;
-                }
+            av_log(NULL, AV_LOG_WARNING,
+                   "[VDecode] Got frame: pts=%lld best_effort_ts=%lld w=%d h=%d fmt=%d (target pts=%lld)\n",
+                   (long long)frame->pts, (long long)bet,
+                   frame->width, frame->height, frame->format, (long long)targetPkt.pts);
 
-                if (m_swsCtx) {
-                    AVFrame *rgbFrame = av_frame_alloc();
-                    rgbFrame->format = AV_PIX_FMT_RGB24;
-                    rgbFrame->width = w;
-                    rgbFrame->height = h;
-                    av_frame_get_buffer(rgbFrame, 0);
+            // PTS 匹配策略：精确 pts → 精确 best_effort_timestamp
+            bool ptsMatch = (frame->pts == targetPkt.pts);
+            bool betMatch = (!ptsMatch && bet != AV_NOPTS_VALUE && bet == targetPkt.pts);
 
-                    sws_scale(m_swsCtx, frame->data, frame->linesize, 0, h,
-                              rgbFrame->data, rgbFrame->linesize);
-
-                    QImage img(rgbFrame->data[0], rgbFrame->width, rgbFrame->height,
-                               rgbFrame->linesize[0], QImage::Format_RGB888);
-                    result = img.copy(); // 深拷贝
-
-                    av_frame_free(&rgbFrame);
-                }
-
-                found = true;
+            if (ptsMatch || betMatch) {
+                result = frameToImage(frame);
+                found = !result.isNull();
                 av_frame_unref(frame);
                 break;
+            }
+
+            // 记录与目标 PTS 最近的帧，用于兜底
+            int64_t effectivePts = (bet != AV_NOPTS_VALUE) ? bet : frame->pts;
+            if (effectivePts != AV_NOPTS_VALUE) {
+                int64_t delta = std::abs(effectivePts - targetPkt.pts);
+                if (delta < closestDelta) {
+                    closestDelta = delta;
+                    closestPts = effectivePts;
+                    closestImage = frameToImage(frame);
+                }
             }
 
             av_frame_unref(frame);
@@ -207,18 +317,45 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
 
     while (!found && maxPackets-- > 0) {
         ret = av_read_frame(m_fmtCtx, pkt);
-        if (ret < 0) break; // EOF 或错误，后续 drain 处理
+        if (ret < 0) {
+            av_log(NULL, AV_LOG_WARNING, "[VDecode] av_read_frame ended: %s after readPktCount=%d\n",
+                   ffmpegError(ret).toUtf8().constData(), readPktCount);
+            break;
+        }
 
         if (pkt->stream_index != targetPkt.streamIndex) {
             av_packet_unref(pkt);
             continue;
         }
 
+        readPktCount++;
+        // 前 5 个包和目标附近的包打详细日志
+        if (readPktCount <= 5 || (pkt->pts >= targetPkt.pts - 3000 && pkt->pts <= targetPkt.pts + 3000)) {
+            av_log(NULL, AV_LOG_WARNING, "[VDecode] Read pkt #%d pts=%lld dts=%lld size=%d flags=%d\n",
+                   readPktCount, (long long)pkt->pts, (long long)pkt->dts, pkt->size, pkt->flags);
+        }
+
+        // 首 GOP leading picture：清除 DISCARD 标志。
+        // VVC/HEVC 的 RASL/RADL 帧会被 demuxer 标记为 DISCARD，
+        // 清除后让解码器有机会尝试解码这些帧（RADL 帧引用 CRA/IDR 之后的帧，理论上可解码）。
+        if (isFirstGopLeading && (pkt->flags & AV_PKT_FLAG_DISCARD)) {
+            pkt->flags &= ~AV_PKT_FLAG_DISCARD;
+            av_log(NULL, AV_LOG_WARNING, "[VDecode] Cleared DISCARD flag on pkt pts=%lld dts=%lld\n",
+                   (long long)pkt->pts, (long long)pkt->dts);
+        }
+
         ret = avcodec_send_packet(codecCtx, pkt);
         if (ret < 0 && ret != AVERROR(EAGAIN)) {
+            sendFailCount++;
+            if (sendFailCount <= 5) {
+                av_log(NULL, AV_LOG_WARNING, "[VDecode] avcodec_send_packet FAIL #%d: %s pkt pts=%lld size=%d\n",
+                       sendFailCount, ffmpegError(ret).toUtf8().constData(),
+                       (long long)pkt->pts, pkt->size);
+            }
             av_packet_unref(pkt);
             continue;
         }
+        sendOkCount++;
 
         drainFrames();
 
@@ -236,16 +373,62 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
 
     // EOF 后 drain 解码器：发送 NULL packet 刷出缓冲区中剩余的帧
     if (!found) {
+        av_log(NULL, AV_LOG_WARNING, "[VDecode] Draining decoder (not found yet)...\n");
         avcodec_send_packet(codecCtx, nullptr);
         drainFrames();
     }
+
+    // 兜底：精确 PTS / best_effort_ts 均未匹配时，使用与目标最近的帧
+    if (!found && !closestImage.isNull()) {
+        int64_t tolerance;
+        if (isFirstGopLeading) {
+            // 首 GOP leading picture（RASL 帧）：解码器可能无法输出精确帧。
+            // 使用更大容差：目标 PTS 到关键帧 PTS 的距离 + 3 个 duration，
+            // 允许回退到最近可解码帧（通常为 CRA/IDR 本身）。
+            int64_t gopRange = std::abs(gopPkt.pts - targetPkt.pts);
+            tolerance = gopRange + ((targetPkt.duration > 0) ? targetPkt.duration * 3 : 3003);
+            av_log(NULL, AV_LOG_WARNING,
+                   "[VDecode] First-GOP leading: using extended tolerance=%lld (gopRange=%lld)\n",
+                   (long long)tolerance, (long long)gopRange);
+        } else {
+            // 普通情况：≤ 3 个 duration（覆盖 VVC 等解码器可能的时间戳偏差）
+            tolerance = (targetPkt.duration > 0) ? targetPkt.duration * 3 : 3003;
+        }
+        if (closestDelta <= tolerance) {
+            av_log(NULL, AV_LOG_WARNING,
+                   "[VDecode] Using closest frame as fallback: closestPts=%lld delta=%lld tolerance=%lld\n",
+                   (long long)closestPts, (long long)closestDelta, (long long)tolerance);
+            result = closestImage;
+            found = true;
+        } else {
+            av_log(NULL, AV_LOG_WARNING,
+                   "[VDecode] Closest frame too far: closestPts=%lld delta=%lld tolerance=%lld\n",
+                   (long long)closestPts, (long long)closestDelta, (long long)tolerance);
+        }
+    }
+
+    av_log(NULL, AV_LOG_WARNING,
+           "[VDecode] === END === found=%d readPkt=%d sendOk=%d sendFail=%d recvOk=%d recvEagain=%d recvEof=%d recvErr=%d lastRecvPts=%lld closestPts=%lld closestDelta=%lld\n",
+           found ? 1 : 0, readPktCount, sendOkCount, sendFailCount,
+           recvOkCount, recvEagainCount, recvEofCount, recvErrCount,
+           (long long)lastRecvPts, (long long)closestPts, (long long)closestDelta);
 
     av_frame_free(&frame);
     av_packet_free(&pkt);
     avcodec_free_context(&codecCtx);
 
     if (!found && errorMsg) {
-        *errorMsg = QStringLiteral("Failed to decode target frame (PTS=%1)").arg(targetPkt.pts);
+        if (isFirstGopLeading) {
+            *errorMsg = QStringLiteral("无法解码此帧：该帧是首 GOP 的 leading picture（RASL 帧），"
+                                       "位于首个关键帧（PTS=%1）之前，解码器可能无法输出。"
+                                       "\n（readPkt=%2 sendOk=%3 sendFail=%4 recvOk=%5 recvErr=%6 closestDelta=%7）")
+                .arg(gopPkt.pts).arg(readPktCount).arg(sendOkCount).arg(sendFailCount)
+                .arg(recvOkCount).arg(recvErrCount).arg(closestDelta);
+        } else {
+            *errorMsg = QStringLiteral("Failed to decode target frame (PTS=%1) | readPkt=%2 sendOk=%3 sendFail=%4 recvOk=%5 recvErr=%6 lastRecvPts=%7 closestPts=%8 closestDelta=%9")
+                .arg(targetPkt.pts).arg(readPktCount).arg(sendOkCount).arg(sendFailCount)
+                .arg(recvOkCount).arg(recvErrCount).arg(lastRecvPts).arg(closestPts).arg(closestDelta);
+        }
     }
 
     return result;

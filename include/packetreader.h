@@ -77,6 +77,9 @@ public:
     // 关键帧索引查询
     int findGopKeyFrame(int packetIndex) const;
 
+    // 查找指定流的前一个 GOP 关键帧（基于关键帧列表直接查找，不依赖相邻 packet 类型）
+    int findPrevGopKeyFrame(int streamIndex, int currentKeyFrameIndex) const;
+
     QString filePath() const { return m_filePath; }
     bool isOpen() const { return m_formatCtx != nullptr; }
 

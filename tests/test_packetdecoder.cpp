@@ -255,6 +255,125 @@ TEST_F(PacketDecoderTest, ReuseContextMultipleDecodes) {
     EXPECT_FALSE(img2.isNull());
 }
 
+// --- VVC 首 GOP leading picture 适配测试 ---
+
+// 辅助方法：查找首 GOP leading B 帧（PTS 早于所属 GOP 关键帧的视频帧）
+static int findFirstGopLeadingPacket(PacketReader *reader) {
+    for (int i = 0; i < reader->packetCount(); ++i) {
+        const PacketInfo &pkt = reader->packetAt(i);
+        if (pkt.mediaType != AVMEDIA_TYPE_VIDEO) continue;
+        int gopKeyIdx = reader->findGopKeyFrame(i);
+        if (gopKeyIdx < 0) continue;
+        const PacketInfo &gopPkt = reader->packetAt(gopKeyIdx);
+        // leading picture: 目标 PTS < 关键帧 PTS，且该关键帧是流的首个关键帧
+        if (pkt.pts != AV_NOPTS_VALUE && gopPkt.pts != AV_NOPTS_VALUE &&
+            pkt.pts < gopPkt.pts) {
+            // 检查是否为首 GOP（无更早的关键帧）
+            int prevGop = (gopKeyIdx > 0) ? reader->findGopKeyFrame(gopKeyIdx - 1) : -1;
+            if (prevGop < 0 || prevGop == gopKeyIdx) {
+                return i; // 这是首 GOP leading picture
+            }
+        }
+    }
+    return -1;
+}
+
+// 辅助方法：查找带 DISCARD 标志的视频帧
+static int findDiscardVideoPacket(PacketReader *reader) {
+    for (int i = 0; i < reader->packetCount(); ++i) {
+        const PacketInfo &pkt = reader->packetAt(i);
+        if (pkt.mediaType == AVMEDIA_TYPE_VIDEO && (pkt.flags & AV_PKT_FLAG_DISCARD))
+            return i;
+    }
+    return -1;
+}
+
+// VVC 首 GOP leading B 帧解码：验证解码不崩溃且能产出图像（精确帧或兜底帧）
+TEST_F(PacketDecoderTest, VvcFirstGopLeadingDecode) {
+    // 优先尝试 VVC 测试文件，不存在则跳过
+    QString path = testFile("test_vvc.mp4");
+    if (!QFile::exists(path)) {
+        path = testFile("test_vvc_aac.mp4");
+    }
+    if (!QFile::exists(path)) {
+        GTEST_SKIP() << "No VVC test file found (test_vvc.mp4 / test_vvc_aac.mp4)";
+    }
+
+    ASSERT_TRUE(openFile(path));
+
+    int idx = findFirstGopLeadingPacket(reader);
+    if (idx < 0) {
+        GTEST_SKIP() << "No first-GOP leading B frame found in VVC test file";
+    }
+
+    const PacketInfo &pkt = reader->packetAt(idx);
+    EXPECT_EQ(pkt.mediaType, AVMEDIA_TYPE_VIDEO);
+
+    // 解码应产出图像（精确帧或兜底到最近可解码帧）
+    QString err;
+    QImage img = decoder->decodeVideoPacket(idx, &err);
+    // 不强制要求成功（RASL 帧可能真的不可解码），但不应崩溃
+    if (img.isNull()) {
+        // 如果解码失败，错误信息应包含 "首 GOP" 或 "leading" 相关描述
+        EXPECT_TRUE(err.contains("leading") || err.contains("GOP") || err.contains("RASL"))
+            << "Unexpected error: " << err.toStdString();
+    } else {
+        EXPECT_GT(img.width(), 0);
+        EXPECT_GT(img.height(), 0);
+    }
+}
+
+// VVC DISCARD 帧解码：验证 DISCARD 标志的帧也能尝试解码
+TEST_F(PacketDecoderTest, VvcDiscardPacketDecode) {
+    QString path = testFile("test_vvc.mp4");
+    if (!QFile::exists(path)) {
+        path = testFile("test_vvc_aac.mp4");
+    }
+    if (!QFile::exists(path)) {
+        GTEST_SKIP() << "No VVC test file found";
+    }
+
+    ASSERT_TRUE(openFile(path));
+
+    int idx = findDiscardVideoPacket(reader);
+    if (idx < 0) {
+        GTEST_SKIP() << "No DISCARD video packets found";
+    }
+
+    // 解码不应崩溃
+    QString err;
+    QImage img = decoder->decodeVideoPacket(idx, &err);
+    // 成功或失败都可接受，关键是不崩溃
+    (void)img;
+}
+
+// 回归测试：H.264 文件（无 leading picture）的解码不应受影响
+TEST_F(PacketDecoderTest, H264NoLeadingPictureRegression) {
+    QString path = testFile("test_h264_aac.mp4");
+    if (!QFile::exists(path)) {
+        GTEST_SKIP() << "Test file not found";
+    }
+
+    ASSERT_TRUE(openFile(path));
+
+    // H.264 一般不会有首 GOP leading picture
+    int leadingIdx = findFirstGopLeadingPacket(reader);
+    // 即使有 leading picture 也应能解码，没有 leading 更好
+
+    // 验证关键帧解码正常
+    int keyIdx = findFirstPacketOfType(AVMEDIA_TYPE_VIDEO);
+    ASSERT_GE(keyIdx, 0);
+    QImage img1 = decoder->decodeVideoPacket(keyIdx);
+    EXPECT_FALSE(img1.isNull());
+
+    // 验证非关键帧解码正常
+    int nonKeyIdx = findFirstNonKeyVideoPacket();
+    if (nonKeyIdx >= 0) {
+        QImage img2 = decoder->decodeVideoPacket(nonKeyIdx);
+        EXPECT_FALSE(img2.isNull());
+    }
+}
+
 // 验证 open / close / 重新 open 的生命周期
 TEST_F(PacketDecoderTest, OpenCloseCycle) {
     QString path = testFile("test_h264_aac.mp4");
