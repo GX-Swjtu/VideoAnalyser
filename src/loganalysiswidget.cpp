@@ -10,6 +10,13 @@
 #include <QTimer>
 #include <QBrush>
 #include <QFont>
+#include <QApplication>
+#include <QClipboard>
+#include <QItemSelectionModel>
+#include <QKeyEvent>
+#include <QShortcut>
+
+#include <algorithm>
 
 extern "C" {
 #include <libavutil/log.h>
@@ -19,6 +26,7 @@ extern "C" {
 QMutex LogAnalysisWidget::s_mutex;
 QVector<LogEntry> LogAnalysisWidget::s_pendingEntries;
 int LogAnalysisWidget::s_nextIndex = 1;
+int LogAnalysisWidget::s_captureLevel = AV_LOG_WARNING;
 bool LogAnalysisWidget::s_callbackInstalled = false;
 
 // ===== LogTableModel =====
@@ -111,6 +119,13 @@ int LogTableModel::levelAt(int row) const
     return m_entries[row].level;
 }
 
+const LogEntry &LogTableModel::entryAt(int row) const
+{
+    static const LogEntry empty{};
+    if (row < 0 || row >= m_entries.size()) return empty;
+    return m_entries[row];
+}
+
 // ===== LogFilterProxyModel =====
 
 LogFilterProxyModel::LogFilterProxyModel(QObject *parent)
@@ -152,13 +167,26 @@ LogAnalysisWidget::LogAnalysisWidget(QWidget *parent)
 
     // 工具栏
     auto *toolbar = new QHBoxLayout();
-    toolbar->addWidget(new QLabel(QStringLiteral("级别过滤:")));
+    toolbar->addWidget(new QLabel(QStringLiteral("记录等级:")));
+    m_captureLevelCombo = new QComboBox();
+    m_captureLevelCombo->addItem(QStringLiteral("Error"),   AV_LOG_ERROR);
+    m_captureLevelCombo->addItem(QStringLiteral("Warning"), AV_LOG_WARNING);
+    m_captureLevelCombo->addItem(QStringLiteral("Info"),    AV_LOG_INFO);
+    m_captureLevelCombo->addItem(QStringLiteral("Verbose"), AV_LOG_VERBOSE);
+    m_captureLevelCombo->addItem(QStringLiteral("Debug"),   AV_LOG_DEBUG);
+    m_captureLevelCombo->setCurrentIndex(1); // 默认记录 Warning 及以上
+    toolbar->addWidget(m_captureLevelCombo);
+
+    toolbar->addSpacing(12);
+    toolbar->addWidget(new QLabel(QStringLiteral("显示过滤:")));
     m_levelCombo = new QComboBox();
-    m_levelCombo->addItem(QStringLiteral("Info"),       32);
-    m_levelCombo->addItem(QStringLiteral("Warning"),   24);
-    m_levelCombo->addItem(QStringLiteral("Error"),     16);
-    m_levelCombo->addItem(QStringLiteral("Fatal"),      8);
-    m_levelCombo->setCurrentIndex(1); // 默认显示 Warning 及以上
+    m_levelCombo->addItem(QStringLiteral("Debug"),   AV_LOG_DEBUG);
+    m_levelCombo->addItem(QStringLiteral("Verbose"), AV_LOG_VERBOSE);
+    m_levelCombo->addItem(QStringLiteral("Info"),    AV_LOG_INFO);
+    m_levelCombo->addItem(QStringLiteral("Warning"), AV_LOG_WARNING);
+    m_levelCombo->addItem(QStringLiteral("Error"),   AV_LOG_ERROR);
+    m_levelCombo->addItem(QStringLiteral("Fatal"),   AV_LOG_FATAL);
+    m_levelCombo->setCurrentIndex(m_levelCombo->findData(AV_LOG_WARNING));
     toolbar->addWidget(m_levelCombo);
 
     toolbar->addSpacing(20);
@@ -176,7 +204,7 @@ LogAnalysisWidget::LogAnalysisWidget(QWidget *parent)
     m_tableView = new QTableView(this);
     m_tableView->setModel(m_filterProxy);
     m_tableView->setSelectionBehavior(QAbstractItemView::SelectRows);
-    m_tableView->setSelectionMode(QAbstractItemView::SingleSelection);
+    m_tableView->setSelectionMode(QAbstractItemView::ExtendedSelection);
     m_tableView->setAlternatingRowColors(true);
     m_tableView->setSortingEnabled(false);
     m_tableView->horizontalHeader()->setStretchLastSection(true);
@@ -192,6 +220,8 @@ LogAnalysisWidget::LogAnalysisWidget(QWidget *parent)
     mainLayout->addWidget(m_tableView, 1);
 
     // 信号
+    connect(m_captureLevelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &LogAnalysisWidget::onCaptureLevelChanged);
     connect(m_levelCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &LogAnalysisWidget::onLevelFilterChanged);
     connect(m_clearBtn, &QPushButton::clicked, this, &LogAnalysisWidget::onClearClicked);
@@ -201,6 +231,15 @@ LogAnalysisWidget::LogAnalysisWidget(QWidget *parent)
     m_pollTimer->setInterval(200);
     connect(m_pollTimer, &QTimer::timeout, this, &LogAnalysisWidget::pollPendingLogs);
     m_pollTimer->start();
+
+    auto *copyShortcut = new QShortcut(QKeySequence::Copy, this);
+    copyShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(copyShortcut, &QShortcut::activated, this, [this]() {
+        copySelectionToClipboard();
+    });
+
+    setCaptureLevel(AV_LOG_WARNING);
+    onLevelFilterChanged(m_levelCombo->currentIndex());
 }
 
 LogAnalysisWidget::~LogAnalysisWidget()
@@ -232,9 +271,53 @@ void LogAnalysisWidget::onLevelFilterChanged(int comboIndex)
     m_filterProxy->setMinLevel(level);
 }
 
+void LogAnalysisWidget::onCaptureLevelChanged(int comboIndex)
+{
+    int level = m_captureLevelCombo->itemData(comboIndex).toInt();
+    setCaptureLevel(level);
+}
+
 void LogAnalysisWidget::onClearClicked()
 {
     clear();
+}
+
+void LogAnalysisWidget::keyPressEvent(QKeyEvent *event)
+{
+    if (event && event->matches(QKeySequence::Copy) && copySelectionToClipboard()) {
+        event->accept();
+        return;
+    }
+
+    QWidget::keyPressEvent(event);
+}
+
+bool LogAnalysisWidget::copySelectionToClipboard()
+{
+    if (!m_tableView || !m_tableView->selectionModel()) {
+        return false;
+    }
+
+    QModelIndexList selectedRows = m_tableView->selectionModel()->selectedRows();
+    if (selectedRows.isEmpty()) {
+        return false;
+    }
+
+    std::sort(selectedRows.begin(), selectedRows.end(), [](const QModelIndex &lhs, const QModelIndex &rhs) {
+        if (lhs.row() != rhs.row()) return lhs.row() < rhs.row();
+        return lhs.column() < rhs.column();
+    });
+
+    QStringList lines;
+    lines << QStringLiteral("Type\tIndex\tLevel\tDescription\tDetails");
+    for (const QModelIndex &proxyIndex : selectedRows) {
+        QModelIndex sourceIndex = m_filterProxy->mapToSource(proxyIndex);
+        const LogEntry &entry = m_logModel->entryAt(sourceIndex.row());
+        lines << formatRowTsv(entry);
+    }
+
+    QApplication::clipboard()->setText(lines.join(QLatin1Char('\n')));
+    return true;
 }
 
 // ===== 静态方法 =====
@@ -259,11 +342,26 @@ QString LogAnalysisWidget::levelToIcon(int avLogLevel)
     return QStringLiteral("\u2022"); // •
 }
 
+void LogAnalysisWidget::setCaptureLevel(int level)
+{
+    {
+        QMutexLocker lock(&s_mutex);
+        s_captureLevel = level;
+    }
+    av_log_set_level(level);
+}
+
+int LogAnalysisWidget::captureLevel()
+{
+    QMutexLocker lock(&s_mutex);
+    return s_captureLevel;
+}
+
 void LogAnalysisWidget::installCallback()
 {
     if (s_callbackInstalled) return;
     s_callbackInstalled = true;
-    av_log_set_level(AV_LOG_VERBOSE);
+    av_log_set_level(AV_LOG_WARNING);
     av_log_set_callback(ffmpegLogCallback);
 }
 
@@ -277,8 +375,13 @@ QVector<LogEntry> LogAnalysisWidget::takePendingEntries()
 
 void LogAnalysisWidget::ffmpegLogCallback(void *ptr, int level, const char *fmt, va_list vl)
 {
-    // 捕获 VERBOSE 及以上级别（含 WARNING/ERROR/INFO/VERBOSE，便于调试 VVC 解码问题）
-    if (level > AV_LOG_VERBOSE) return;
+    int currentCaptureLevel = AV_LOG_WARNING;
+    {
+        QMutexLocker lock(&s_mutex);
+        currentCaptureLevel = s_captureLevel;
+    }
+    // 仅捕获当前设定记录等级及以上（数值越小越严重）
+    if (level > currentCaptureLevel) return;
 
     // 格式化消息
     char line[1024];
@@ -305,4 +408,28 @@ void LogAnalysisWidget::ffmpegLogCallback(void *ptr, int level, const char *fmt,
     QMutexLocker lock(&s_mutex);
     entry.index = s_nextIndex++;
     s_pendingEntries.append(entry);
+}
+
+QString LogAnalysisWidget::formatRowTsv(const LogEntry &entry)
+{
+    auto sanitize = [](QString value) {
+        value.replace(QLatin1Char('\t'), QLatin1Char(' '));
+        value.replace(QLatin1Char('\r'), QLatin1Char(' '));
+        value.replace(QLatin1Char('\n'), QLatin1Char(' '));
+        return value;
+    };
+
+    const QString timestamp = entry.timestamp.toString(QStringLiteral("yyyy-M-d HH:mm:ss"));
+    const QString className = entry.className.isEmpty() ? QStringLiteral("-") : entry.className;
+    const QString details = QStringLiteral("[%1] %2: %3")
+                                .arg(timestamp)
+                                .arg(className)
+                                .arg(entry.message);
+
+    return QStringLiteral("%1\t%2\t%3\t%4\t%5")
+        .arg(sanitize(levelToIcon(entry.level)))
+        .arg(entry.index)
+        .arg(sanitize(levelToString(entry.level)))
+        .arg(sanitize(entry.message))
+        .arg(sanitize(details));
 }

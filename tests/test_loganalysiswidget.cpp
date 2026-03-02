@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include "loganalysiswidget.h"
 
+#include <QComboBox>
+
 extern "C" {
 #include <libavutil/log.h>
 }
@@ -57,6 +59,47 @@ TEST(LogAnalysisWidgetTest, LevelToIcon_Info) {
 TEST(LogAnalysisWidgetTest, LevelToIcon_Verbose) {
     QString icon = LogAnalysisWidget::levelToIcon(AV_LOG_VERBOSE);
     EXPECT_EQ(icon, "\u2022"); // •
+}
+
+TEST(LogAnalysisWidgetTest, CaptureLevel_DefaultIsWarning) {
+    LogAnalysisWidget::installCallback();
+    EXPECT_EQ(LogAnalysisWidget::captureLevel(), AV_LOG_WARNING);
+}
+
+TEST(LogAnalysisWidgetTest, CaptureLevel_SetAndGet) {
+    LogAnalysisWidget::setCaptureLevel(AV_LOG_DEBUG);
+    EXPECT_EQ(LogAnalysisWidget::captureLevel(), AV_LOG_DEBUG);
+    LogAnalysisWidget::setCaptureLevel(AV_LOG_WARNING);
+}
+
+TEST(LogAnalysisWidgetTest, FormatRowTsv_Normal) {
+    LogEntry entry{};
+    entry.index = 7;
+    entry.level = AV_LOG_WARNING;
+    entry.className = "h264";
+    entry.message = "decode warning";
+    entry.timestamp = QDateTime::fromString("2026-03-02 10:20:30", "yyyy-MM-dd HH:mm:ss");
+
+    const QString line = LogAnalysisWidget::formatRowTsv(entry);
+    const QStringList parts = line.split('\t');
+    ASSERT_EQ(parts.size(), 5);
+    EXPECT_EQ(parts[1], "7");
+    EXPECT_EQ(parts[2], "warning");
+    EXPECT_EQ(parts[3], "decode warning");
+    EXPECT_TRUE(parts[4].contains("h264"));
+}
+
+TEST(LogAnalysisWidgetTest, FormatRowTsv_EmptyClassName) {
+    LogEntry entry{};
+    entry.index = 8;
+    entry.level = AV_LOG_ERROR;
+    entry.className.clear();
+    entry.message = "decoder failed";
+    entry.timestamp = QDateTime::fromString("2026-03-02 11:00:00", "yyyy-MM-dd HH:mm:ss");
+
+    const QString line = LogAnalysisWidget::formatRowTsv(entry);
+    EXPECT_TRUE(line.contains("\t8\terror\tdecoder failed\t"));
+    EXPECT_TRUE(line.contains(" -: decoder failed"));
 }
 
 // ===== LogTableModel 测试 =====
@@ -172,4 +215,37 @@ TEST(LogAnalysisWidgetTest, TakePendingEntries) {
     auto entries = LogAnalysisWidget::takePendingEntries();
     // 不做数量断言，只要不崩溃
     Q_UNUSED(entries);
+}
+
+TEST(LogAnalysisWidgetTest, DisplayFilterAlwaysSupportsAllLevels) {
+    LogAnalysisWidget widget;
+    const auto combos = widget.findChildren<QComboBox *>();
+    ASSERT_GE(combos.size(), 2);
+
+    QComboBox *captureCombo = nullptr;
+    QComboBox *displayCombo = nullptr;
+    for (QComboBox *combo : combos) {
+        const bool hasDebug = combo->findData(AV_LOG_DEBUG) >= 0;
+        const bool hasFatal = combo->findData(AV_LOG_FATAL) >= 0;
+        if (hasDebug && !hasFatal) {
+            captureCombo = combo;
+        }
+        if (hasFatal) {
+            displayCombo = combo;
+        }
+    }
+
+    ASSERT_NE(captureCombo, nullptr);
+    ASSERT_NE(displayCombo, nullptr);
+    EXPECT_GE(displayCombo->findData(AV_LOG_DEBUG), 0);
+    EXPECT_GE(displayCombo->findData(AV_LOG_VERBOSE), 0);
+    EXPECT_GE(displayCombo->findData(AV_LOG_INFO), 0);
+    EXPECT_GE(displayCombo->findData(AV_LOG_WARNING), 0);
+    EXPECT_GE(displayCombo->findData(AV_LOG_ERROR), 0);
+    EXPECT_GE(displayCombo->findData(AV_LOG_FATAL), 0);
+
+    captureCombo->setCurrentIndex(captureCombo->findData(AV_LOG_DEBUG));
+    EXPECT_GE(displayCombo->findData(AV_LOG_DEBUG), 0);
+    captureCombo->setCurrentIndex(captureCombo->findData(AV_LOG_WARNING));
+    EXPECT_GE(displayCombo->findData(AV_LOG_DEBUG), 0);
 }

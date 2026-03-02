@@ -97,7 +97,7 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
 
     const StreamInfo &streamInfo = m_reader->streams()[targetPkt.streamIndex];
 
-    av_log(NULL, AV_LOG_WARNING, "[VDecode] === START === pktIdx=%d codec=%s codec_id=%d targetPTS=%lld targetDTS=%lld flags=%d gopKeyFrame=%d\n",
+    av_log(NULL, AV_LOG_DEBUG, "[VDecode] === START === pktIdx=%d codec=%s codec_id=%d targetPTS=%lld targetDTS=%lld flags=%d gopKeyFrame=%d\n",
            packetIndex, streamInfo.codecName.toUtf8().constData(),
            streamInfo.codecpar->codec_id,
            (long long)targetPkt.pts, (long long)targetPkt.dts,
@@ -110,7 +110,7 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
         if (errorMsg) *errorMsg = QStringLiteral("Decoder not found for codec: %1").arg(streamInfo.codecName);
         return QImage();
     }
-    av_log(NULL, AV_LOG_WARNING, "[VDecode] Found decoder: %s (%s)\n", codec->name, codec->long_name);
+    av_log(NULL, AV_LOG_DEBUG, "[VDecode] Found decoder: %s (%s)\n", codec->name, codec->long_name);
 
     AVCodecContext *codecCtx = avcodec_alloc_context3(codec);
     if (!codecCtx) {
@@ -125,7 +125,7 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
         avcodec_free_context(&codecCtx);
         return QImage();
     }
-    av_log(NULL, AV_LOG_WARNING, "[VDecode] codecCtx: w=%d h=%d pix_fmt=%d extradata_size=%d\n",
+    av_log(NULL, AV_LOG_DEBUG, "[VDecode] codecCtx: w=%d h=%d pix_fmt=%d extradata_size=%d\n",
            codecCtx->width, codecCtx->height, codecCtx->pix_fmt, codecCtx->extradata_size);
 
     codecCtx->pkt_timebase = streamInfo.timeBase;
@@ -137,7 +137,7 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
         avcodec_free_context(&codecCtx);
         return QImage();
     }
-    av_log(NULL, AV_LOG_WARNING, "[VDecode] Decoder opened OK\n");
+    av_log(NULL, AV_LOG_DEBUG, "[VDecode] Decoder opened OK\n");
 
     // 找到 GOP 起始关键帧
     int gopStart = m_reader->findGopKeyFrame(packetIndex);
@@ -160,7 +160,7 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
             // 避免 findGopKeyFrame(gopStart-1) 因相邻 packet 是音频包而返回 -1 的问题。
             int prevGopStart = m_reader->findPrevGopKeyFrame(targetPkt.streamIndex, gopStart);
             if (prevGopStart >= 0 && prevGopStart < gopStart) {
-                av_log(NULL, AV_LOG_WARNING,
+                  av_log(NULL, AV_LOG_DEBUG,
                        "[VDecode] Leading picture detected (targetPTS=%lld < gopPTS=%lld), using prev GOP keyframe %d -> %d\n",
                        (long long)targetPkt.pts, (long long)gopPkt.pts, gopStart, prevGopStart);
                 gopStart = prevGopStart;
@@ -173,7 +173,7 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
             // 无更早的关键帧可回退。需要从文件最开头开始解码，
             // 并清除 DISCARD 标志以尝试让解码器输出这些帧。
             isFirstGopLeading = true;
-            av_log(NULL, AV_LOG_WARNING,
+                 av_log(NULL, AV_LOG_DEBUG,
                    "[VDecode] First-GOP leading picture: targetPTS=%lld < keyframePTS=%lld, gopStart=%d, no earlier keyframe available\n",
                    (long long)targetPkt.pts, (long long)gopPkt.pts, gopStart);
         }
@@ -190,7 +190,7 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
         int64_t startTs = (m_fmtCtx->start_time != AV_NOPTS_VALUE) ? m_fmtCtx->start_time : 0;
         seekTs = startTs;
         ret = avformat_seek_file(m_fmtCtx, -1, INT64_MIN, startTs, startTs, 0);
-        av_log(NULL, AV_LOG_WARNING,
+        av_log(NULL, AV_LOG_DEBUG,
                "[VDecode] First-GOP seek to start: startTs=%lld ret=%d\n",
                (long long)startTs, ret);
     } else {
@@ -199,7 +199,7 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
         ret = av_seek_frame(m_fmtCtx, targetPkt.streamIndex, seekTs, AVSEEK_FLAG_BACKWARD);
     }
 
-    av_log(NULL, AV_LOG_WARNING, "[VDecode] GOP seek: gopStart=%d seekTs=%lld streamIndex=%d isLeading=%d isFirstGopLeading=%d\n",
+    av_log(NULL, AV_LOG_DEBUG, "[VDecode] GOP seek: gopStart=%d seekTs=%lld streamIndex=%d isLeading=%d isFirstGopLeading=%d\n",
            gopStart, (long long)seekTs, targetPkt.streamIndex, isLeadingPicture ? 1 : 0, isFirstGopLeading ? 1 : 0);
 
     if (ret < 0) {
@@ -284,7 +284,7 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
             // 获取 best_effort_timestamp（某些解码器如 VVC 的 frame->pts 不一定与包 PTS 一致）
             int64_t bet = frame->best_effort_timestamp;
 
-            av_log(NULL, AV_LOG_WARNING,
+                 av_log(NULL, AV_LOG_DEBUG,
                    "[VDecode] Got frame: pts=%lld best_effort_ts=%lld w=%d h=%d fmt=%d (target pts=%lld)\n",
                    (long long)frame->pts, (long long)bet,
                    frame->width, frame->height, frame->format, (long long)targetPkt.pts);
@@ -318,7 +318,7 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
     while (!found && maxPackets-- > 0) {
         ret = av_read_frame(m_fmtCtx, pkt);
         if (ret < 0) {
-            av_log(NULL, AV_LOG_WARNING, "[VDecode] av_read_frame ended: %s after readPktCount=%d\n",
+                 av_log(NULL, AV_LOG_DEBUG, "[VDecode] av_read_frame ended: %s after readPktCount=%d\n",
                    ffmpegError(ret).toUtf8().constData(), readPktCount);
             break;
         }
@@ -331,7 +331,7 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
         readPktCount++;
         // 前 5 个包和目标附近的包打详细日志
         if (readPktCount <= 5 || (pkt->pts >= targetPkt.pts - 3000 && pkt->pts <= targetPkt.pts + 3000)) {
-            av_log(NULL, AV_LOG_WARNING, "[VDecode] Read pkt #%d pts=%lld dts=%lld size=%d flags=%d\n",
+                 av_log(NULL, AV_LOG_DEBUG, "[VDecode] Read pkt #%d pts=%lld dts=%lld size=%d flags=%d\n",
                    readPktCount, (long long)pkt->pts, (long long)pkt->dts, pkt->size, pkt->flags);
         }
 
@@ -340,7 +340,7 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
         // 清除后让解码器有机会尝试解码这些帧（RADL 帧引用 CRA/IDR 之后的帧，理论上可解码）。
         if (isFirstGopLeading && (pkt->flags & AV_PKT_FLAG_DISCARD)) {
             pkt->flags &= ~AV_PKT_FLAG_DISCARD;
-            av_log(NULL, AV_LOG_WARNING, "[VDecode] Cleared DISCARD flag on pkt pts=%lld dts=%lld\n",
+                 av_log(NULL, AV_LOG_DEBUG, "[VDecode] Cleared DISCARD flag on pkt pts=%lld dts=%lld\n",
                    (long long)pkt->pts, (long long)pkt->dts);
         }
 
@@ -373,7 +373,7 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
 
     // EOF 后 drain 解码器：发送 NULL packet 刷出缓冲区中剩余的帧
     if (!found) {
-        av_log(NULL, AV_LOG_WARNING, "[VDecode] Draining decoder (not found yet)...\n");
+        av_log(NULL, AV_LOG_DEBUG, "[VDecode] Draining decoder (not found yet)...\n");
         avcodec_send_packet(codecCtx, nullptr);
         drainFrames();
     }
@@ -387,7 +387,7 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
             // 允许回退到最近可解码帧（通常为 CRA/IDR 本身）。
             int64_t gopRange = std::abs(gopPkt.pts - targetPkt.pts);
             tolerance = gopRange + ((targetPkt.duration > 0) ? targetPkt.duration * 3 : 3003);
-            av_log(NULL, AV_LOG_WARNING,
+                 av_log(NULL, AV_LOG_DEBUG,
                    "[VDecode] First-GOP leading: using extended tolerance=%lld (gopRange=%lld)\n",
                    (long long)tolerance, (long long)gopRange);
         } else {
@@ -395,7 +395,7 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
             tolerance = (targetPkt.duration > 0) ? targetPkt.duration * 3 : 3003;
         }
         if (closestDelta <= tolerance) {
-            av_log(NULL, AV_LOG_WARNING,
+                 av_log(NULL, AV_LOG_DEBUG,
                    "[VDecode] Using closest frame as fallback: closestPts=%lld delta=%lld tolerance=%lld\n",
                    (long long)closestPts, (long long)closestDelta, (long long)tolerance);
             result = closestImage;
@@ -407,7 +407,7 @@ QImage PacketDecoder::decodeVideoPacket(int packetIndex, QString *errorMsg)
         }
     }
 
-    av_log(NULL, AV_LOG_WARNING,
+    av_log(NULL, AV_LOG_DEBUG,
            "[VDecode] === END === found=%d readPkt=%d sendOk=%d sendFail=%d recvOk=%d recvEagain=%d recvEof=%d recvErr=%d lastRecvPts=%lld closestPts=%lld closestDelta=%lld\n",
            found ? 1 : 0, readPktCount, sendOkCount, sendFailCount,
            recvOkCount, recvEagainCount, recvEofCount, recvErrCount,

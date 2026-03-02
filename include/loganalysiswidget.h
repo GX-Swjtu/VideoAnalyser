@@ -12,6 +12,7 @@ class QTableView;
 class QComboBox;
 class QPushButton;
 class QTimer;
+class QKeyEvent;
 
 /// 单条 FFmpeg 日志条目
 struct LogEntry {
@@ -51,6 +52,9 @@ public:
     /// 获取指定行的日志级别
     int levelAt(int row) const;
 
+    /// 获取指定行的日志条目（越界返回空条目）
+    const LogEntry &entryAt(int row) const;
+
 private:
     QVector<LogEntry> m_entries;
 };
@@ -89,21 +93,37 @@ public:
     /// AV_LOG_XXX 级别转图标字符
     static QString levelToIcon(int avLogLevel);
 
+    /// 设置日志记录等级（仅调整后生效，不补录历史日志）
+    static void setCaptureLevel(int level);
+
+    /// 获取当前日志记录等级
+    static int captureLevel();
+
     /// 安装全局 FFmpeg 日志回调（仅首次调用有效）
     static void installCallback();
 
     /// 从 pending 队列中取出所有待处理条目
     static QVector<LogEntry> takePendingEntries();
 
+    /// 将单条日志格式化为 TSV（供复制与测试）
+    static QString formatRowTsv(const LogEntry &entry);
+
 private slots:
     void pollPendingLogs();
+    void onCaptureLevelChanged(int comboIndex);
     void onLevelFilterChanged(int comboIndex);
     void onClearClicked();
 
+protected:
+    void keyPressEvent(QKeyEvent *event) override;
+
 private:
+    bool copySelectionToClipboard();
+
     LogTableModel *m_logModel = nullptr;
     LogFilterProxyModel *m_filterProxy = nullptr;
     QTableView *m_tableView = nullptr;
+    QComboBox *m_captureLevelCombo = nullptr;
     QComboBox *m_levelCombo = nullptr;
     QPushButton *m_clearBtn = nullptr;
     QTimer *m_pollTimer = nullptr;
@@ -112,6 +132,7 @@ private:
     static QMutex s_mutex;
     static QVector<LogEntry> s_pendingEntries;
     static int s_nextIndex;
+    static int s_captureLevel;
     static bool s_callbackInstalled;
     static void ffmpegLogCallback(void *ptr, int level, const char *fmt, va_list vl);
 };
